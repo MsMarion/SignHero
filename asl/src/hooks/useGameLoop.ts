@@ -133,7 +133,10 @@ export function useGameLoop(beatmap: Beatmap): {
         audio.removeEventListener("pause", handleExternalPause);
         audio.removeEventListener("seeking", handleExternalSeek);
         audio.pause();
-        audio.src = "";
+        // Release the media resource without `audio.src = ""`, which makes Firefox log
+        // "Invalid URI. Load of media resource failed".
+        audio.removeAttribute("src");
+        audio.load();
         audioRef.current = null;
       };
     } else {

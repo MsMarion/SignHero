@@ -143,7 +143,10 @@ function SongCarouselContent({ songs = [] }: SongCarouselProps) {
     try {
       audioRef.current.src = song.audioUrl;
       audioRef.current.volume = 0.5;
-      audioRef.current.play().catch(err => console.error("Preview play error:", err));
+      audioRef.current.play().catch((err: unknown) => {
+        // Moving the mouse to another song interrupts the previous preview; that rejects play() with AbortError and is not a real failure.
+        if ((err as { name?: string } | null)?.name !== "AbortError") console.error("Preview play error:", err);
+      });
       
       // Dispatch event to dim background music
       window.dispatchEvent(new Event("audio-preview-start"));
