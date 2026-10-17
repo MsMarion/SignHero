@@ -316,7 +316,7 @@ For issues or questions:
 ## File Structure
 
 ```
-ASL-Fun-Training/
+SignHero/
 ├── asl/                          # Next.js game
 │   ├── src/
 │   │   ├── app/game/[id]/       # Game page

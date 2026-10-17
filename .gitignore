@@ -98,3 +98,6 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Host-specific compose overrides (see docker-compose.override.example.yml)
+docker-compose.override.yml

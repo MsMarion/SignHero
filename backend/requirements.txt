@@ -1,0 +1,18 @@
+# Backend (api_server_http.py) runtime dependencies, Linux/container safe.
+# torch and torchvision are installed separately in the Dockerfile because the right CUDA build
+# depends on the GPU (cu126 for Pascal such as the GTX 1070, cu128 for Blackwell such as the RTX 5090).
+numpy==1.26.4
+protobuf==3.20.3
+mediapipe==0.10.9
+fastapi==0.143.3
+uvicorn[standard]==0.54.0
+websockets==16.1.1
+python-multipart==0.0.32
+pillow==12.3.0
+pandas==2.3.3
+scikit-learn==1.7.2
+scipy==1.15.3
+matplotlib==3.10.9
+seaborn==0.13.2
+torchsummary==1.5.1
+tqdm==4.70.1
