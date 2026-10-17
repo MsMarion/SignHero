@@ -41,6 +41,12 @@ export const env = createEnv({
       (str) => process.env.VERCEL_URL ?? str,
       process.env.VERCEL_URL ? z.string() : z.string().url()
     ),
+
+    // Google sign-in (optional): the "Continue with Google" button only appears when both are set.
+    // OAuth client authorised origins and redirect URIs must match NEXTAUTH_URL, e.g.
+    // http://localhost:4000/api/auth/callback/google
+    GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_CLIENT_SECRET: z.string().optional(),
   },
 
   /**
@@ -76,6 +82,8 @@ export const env = createEnv({
     PYTHON_PATH: process.env.PYTHON_PATH,
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
     NEXTAUTH_URL: process.env.NEXTAUTH_URL,
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
     NEXT_PUBLIC_GOOGLE_API_KEY: process.env.NEXT_PUBLIC_GOOGLE_API_KEY,
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL,

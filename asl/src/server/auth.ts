@@ -1,7 +1,13 @@
 import { getServerSession, type NextAuthOptions, type DefaultSession } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import GoogleProvider from "next-auth/providers/google";
 import { db } from "~/server/db";
+import { env } from "~/env";
+import { upsertGoogleUser, type GoogleProfileLike } from "~/server/auth-google";
 import bcrypt from "bcryptjs";
+
+/** Google sign-in is only offered when both OAuth values are configured. */
+const googleEnabled = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
 
 /**
  * Module augmentation for `next-auth` types. Allows us to add custom properties to the `session`
@@ -36,8 +42,21 @@ export const authOptions: NextAuthOptions = {
         id: token.id as string,
       },
     }),
-    jwt: ({ token, user }) => {
-      if (user) {
+    signIn: async ({ account, profile }) => {
+      if (account?.provider !== "google") return true;
+      // Only let a Google-verified email in; this also creates the account on first sign-in.
+      const dbUser = await upsertGoogleUser((profile ?? {}) as GoogleProfileLike);
+      return Boolean(dbUser);
+    },
+    jwt: async ({ token, user, account, profile }) => {
+      if (account?.provider === "google") {
+        // For Google the session must carry OUR user id, not Google's account id.
+        const dbUser = await upsertGoogleUser((profile ?? {}) as GoogleProfileLike);
+        if (dbUser) {
+          token.id = dbUser.id;
+          token.name = dbUser.displayName ?? dbUser.name ?? token.name;
+        }
+      } else if (user) {
         token.id = user.id;
       }
       return token;
@@ -76,6 +95,14 @@ export const authOptions: NextAuthOptions = {
         };
       }
     }),
+    ...(googleEnabled
+      ? [
+          GoogleProvider({
+            clientId: env.GOOGLE_CLIENT_ID!,
+            clientSecret: env.GOOGLE_CLIENT_SECRET!,
+          }),
+        ]
+      : []),
   ],
   session: {
     strategy: "jwt",
