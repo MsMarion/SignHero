@@ -32,6 +32,15 @@ export function useAIInteraction({
 
   const latestPrediction = predictions[predictions.length - 1] ?? null;
 
+  // Callers pass inline arrow functions, which change identity on every render. Reading the
+  // latest versions through refs keeps them out of the effect dependencies; otherwise the
+  // effect re-ran every render, and its setHoldProgress call re-rendered, causing an
+  // endless update loop ("Maximum update depth exceeded") while a sign was held.
+  const onCorrectRef = useRef(onCorrect);
+  const onMistakeRef = useRef(onMistake);
+  onCorrectRef.current = onCorrect;
+  onMistakeRef.current = onMistake;
+
   useEffect(() => {
     if (!isPlaying || !targetLetter || !isConnected) {
       holdStartRef.current = null;
@@ -46,7 +55,7 @@ export function useAIInteraction({
     if (isCorrect) {
       // If it's a physical keyboard fallback press, instantly confirm without hold delay!
       if (latestPrediction.isKeyboard) {
-        onCorrect(targetLetter);
+        onCorrectRef.current(targetLetter);
         holdStartRef.current = null;
         setHoldProgress(0);
         return;
@@ -61,7 +70,7 @@ export function useAIInteraction({
         setHoldProgress(progress);
 
         if (elapsed >= HOLD_DURATION) {
-          onCorrect(targetLetter);
+          onCorrectRef.current(targetLetter);
           holdStartRef.current = null;
           setHoldProgress(0);
         }
@@ -77,14 +86,14 @@ export function useAIInteraction({
         // Debounce: only fire once per unique mistake
         if (mistakeKey !== lastMistakeRef.current) {
           lastMistakeRef.current = mistakeKey;
-          onMistake(latestPrediction.letter, targetLetter);
+          onMistakeRef.current(latestPrediction.letter, targetLetter);
         }
       }
 
       holdStartRef.current = null;
       setHoldProgress(0);
     }
-  }, [isPlaying, targetLetter, latestPrediction, isConnected, onCorrect, onMistake]);
+  }, [isPlaying, targetLetter, latestPrediction, isConnected]);
 
   // Reset on target change
   useEffect(() => {
