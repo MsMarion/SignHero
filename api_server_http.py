@@ -296,14 +296,21 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.send_json({"type": "ready", "message": "Connected to RTX 5090 Micro-Batcher"})
     
     last_frame_time = 0
-    
+    last_reply = None
+
     try:
         while True:
             data = await websocket.receive_json()
-            
-            # Anti-spam rate limiter (~35 FPS max per socket)
+
+            # Anti-spam rate limiter (~35 FPS max per socket). The client sends one frame at a
+            # time and waits for the reply, so a dropped frame must still get an answer or the
+            # client stalls forever; repeat the last prediction instead of staying silent.
             now = time.time()
             if now - last_frame_time < 0.028: # < 28ms
+                reply = dict(last_reply) if last_reply else {"letter": "None", "confidence": 0.0, "handDetected": False}
+                reply["timestamp"] = time.time()
+                reply["clientTimestamp"] = data.get("clientTimestamp", now)
+                await websocket.send_json(reply)
                 continue
             last_frame_time = now
             
@@ -319,13 +326,14 @@ async def websocket_endpoint(websocket: WebSocket):
             )
             
             if not hand_detected or not valid_landmarks:
-                await websocket.send_json({
+                last_reply = {
                     "letter": "None",
                     "confidence": 0.0,
                     "timestamp": time.time(),
                     "clientTimestamp": client_timestamp,
                     "handDetected": False
-                })
+                }
+                await websocket.send_json(last_reply)
                 continue
                 
             loop = asyncio.get_running_loop()
@@ -338,6 +346,7 @@ async def websocket_endpoint(websocket: WebSocket):
             })
             
             prediction = await future
+            last_reply = prediction
             await websocket.send_json(prediction)
             
     except WebSocketDisconnect:
