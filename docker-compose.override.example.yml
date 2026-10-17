@@ -1,0 +1,14 @@
+# Host-specific overrides for docker-compose.yml.
+#
+# Copy this file to docker-compose.override.yml (git-ignored). Docker Compose loads that file
+# automatically next to docker-compose.yml, so no extra -f flags are needed on a developer machine.
+# On a server that starts the stack with an explicit `-f docker-compose.yml`, add
+# `-f docker-compose.override.yml` to that command as well.
+#
+# Why this exists: minio/minio was removed from Docker Hub by MinIO Inc. A host that still has the
+# image cached can keep using it, but only if compose is told not to re-check the registry.
+# Do not `docker rmi` that cached image on such a host without lining up a replacement first.
+
+services:
+  minio:
+    pull_policy: never
