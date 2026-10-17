@@ -1,0 +1,22 @@
+# Run the detection backend in a container with GPU access:
+#   docker compose -f backend/docker-compose.yml up -d --build
+# The default PyTorch build is cu126 (works on Pascal, e.g. GTX 1070). For an RTX 5090 set
+#   TORCH_INDEX=https://download.pytorch.org/whl/cu128
+services:
+  signhero-api:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+      args:
+        TORCH_INDEX: ${TORCH_INDEX:-https://download.pytorch.org/whl/cu126}
+    image: signhero-api:local
+    restart: unless-stopped
+    ports:
+      - "4001:4001"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

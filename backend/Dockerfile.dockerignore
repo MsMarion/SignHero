@@ -1,0 +1,10 @@
+# Allow-list build context: only what the API server needs at runtime.
+*
+!api_server_http.py
+!backend/requirements.txt
+!Base test/Sign-Language-Recognition/app
+!Base test/Sign-Language-Recognition/model
+!Base test/Sign-Language-Recognition/utils
+!Base test/Sign-Language-Recognition/data/weights/asl_crop_v4_1_mobilenet_weights.pth
+!Base test/Sign-Language-Recognition/data/weights/asl_crop_v4_0_mobilenet_weights.pth
+**/__pycache__
