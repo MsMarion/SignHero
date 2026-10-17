@@ -10,7 +10,6 @@ export default function SignInPage() {
   const router = useRouter();
   const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState("");
-  const [heroName, setHeroName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -53,7 +52,7 @@ export default function SignInPage() {
     setLoading(true);
 
     if (isRegistering) {
-      registerMutation.mutate({ email, password, heroName });
+      registerMutation.mutate({ email, password });
     } else {
       const result = await signIn("credentials", {
         email,
@@ -92,7 +91,7 @@ export default function SignInPage() {
             {isRegistering ? "CREATE HERO" : "SIGN IN"}
           </h1>
           <p className="text-purple-200/60 text-sm font-mono">
-            {isRegistering ? "Register your new identity" : "Welcome back, Hero"}
+            {isRegistering ? "Create your account, then choose your hero name" : "Welcome back, Hero"}
           </p>
         </div>
 
@@ -121,29 +120,6 @@ export default function SignInPage() {
         )}
 
         <form onSubmit={handleAuth} className="space-y-6">
-          <AnimatePresence>
-            {isRegistering && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="space-y-2 overflow-hidden"
-              >
-                <label className="text-[10px] text-fuchsia-300 uppercase tracking-[3px] ml-1 font-bold">
-                  Hero Name
-                </label>
-                <input
-                  type="text"
-                  required={isRegistering}
-                  value={heroName}
-                  onChange={(e) => setHeroName(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-cyan-400/50 transition-all placeholder:text-white/10"
-                  placeholder="e.g. SignMaster"
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           <div className="space-y-2">
             <label className="text-[10px] text-fuchsia-300 uppercase tracking-[3px] ml-1 font-bold">
               Login Email

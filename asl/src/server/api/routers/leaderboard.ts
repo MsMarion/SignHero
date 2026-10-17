@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { db } from "~/server/db";
 import { createTRPCRouter, publicProcedure } from "../trpc";
 import { z } from "zod";
+import { resolveScoreIdentity } from "~/server/score-identity";
 
 const createEntrySchema = z.object({
     name: z.string().min(1, "Name is required").max(20, "Name too long"),
@@ -80,7 +81,9 @@ export const leaderboardRouter = createTRPCRouter({
 
     create: publicProcedure
         .input(createEntrySchema)
-        .mutation(async ({ input }) => {
+        .mutation(async ({ input, ctx }) => {
+            // Resolve who this score belongs to before the try block, so a refusal is not turned into a 500.
+            const identity = await resolveScoreIdentity(ctx.session, input.name);
             try {
                 const count = await db.leaderboardEntry.count({
                     where: input.songId ? { songId: input.songId } : {},
@@ -88,10 +91,11 @@ export const leaderboardRouter = createTRPCRouter({
 
                 const entry = await db.leaderboardEntry.create({
                     data: {
-                        name: input.name.toUpperCase(),
+                        name: identity.name.toUpperCase(),
                         score: input.score,
                         playerId: input.playerId,
                         songId: input.songId,
+                        userId: identity.userId,
                     },
                 });
 
@@ -117,9 +121,11 @@ export const leaderboardRouter = createTRPCRouter({
 
     upsert: publicProcedure
         .input(createEntrySchema)
-        .mutation(async ({ input }) => {
+        .mutation(async ({ input, ctx }) => {
+            // Resolve who this score belongs to before the try block, so a refusal is not turned into a 500.
+            const identity = await resolveScoreIdentity(ctx.session, input.name);
             try {
-                const normalizedName = input.name.toUpperCase();
+                const normalizedName = identity.name.toUpperCase();
 
                 // CRITICAL: Use playerId or name, scoped strictly by songId
                 const existingEntry = input.playerId 
@@ -140,6 +146,7 @@ export const leaderboardRouter = createTRPCRouter({
                             data: {
                                 score: input.score,
                                 name: normalizedName,
+                                userId: identity.userId,
                             },
                         });
                         console.log(`✅ Updated ${normalizedName} on song ${input.songId}: ${existingEntry.score} → ${input.score}`);
@@ -155,6 +162,7 @@ export const leaderboardRouter = createTRPCRouter({
                             score: input.score,
                             playerId: input.playerId,
                             songId: input.songId,
+                            userId: identity.userId,
                         },
                     });
                     console.log(`✅ Created new entry for ${normalizedName} on song ${input.songId}: ${input.score}`);

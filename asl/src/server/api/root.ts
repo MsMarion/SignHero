@@ -3,6 +3,7 @@ import { songRouter } from "~/server/api/routers/song";
 import { leaderboardRouter } from "~/server/api/routers/leaderboard";
 import { playerRouter } from "~/server/api/routers/player";
 import { userRouter } from "~/server/api/routers/user";
+import { heroNameRouter } from "~/server/api/routers/hero-name";
 
 /**
  * This is the primary router for your server.
@@ -14,6 +15,7 @@ export const appRouter = createTRPCRouter({
   leaderboard: leaderboardRouter,
   player: playerRouter,
   user: userRouter,
+  heroName: heroNameRouter,
 });
 
 // export type definition of API

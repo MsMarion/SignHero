@@ -4,6 +4,7 @@ import GoogleProvider from "next-auth/providers/google";
 import { db } from "~/server/db";
 import { env } from "~/env";
 import { upsertGoogleUser, type GoogleProfileLike } from "~/server/auth-google";
+import { getHeroName } from "~/server/hero-name";
 import bcrypt from "bcryptjs";
 
 /** Google sign-in is only offered when both OAuth values are configured. */
@@ -17,6 +18,8 @@ declare module "next-auth" {
   interface Session extends DefaultSession {
     user: {
       id: string;
+      /** The permanently claimed hero name, or null until the player has chosen one. */
+      heroName: string | null;
       // ...other properties
       // role: UserRole;
     } & DefaultSession["user"];
@@ -26,6 +29,13 @@ declare module "next-auth" {
   //   // ...other properties
   //   // role: UserRole;
   // }
+}
+
+declare module "next-auth/jwt" {
+  interface JWT {
+    id?: string;
+    heroName?: string | null;
+  }
 }
 
 /**
@@ -40,6 +50,7 @@ export const authOptions: NextAuthOptions = {
       user: {
         ...session.user,
         id: token.id as string,
+        heroName: token.heroName ?? null,
       },
     }),
     signIn: async ({ account, profile }) => {
@@ -48,7 +59,7 @@ export const authOptions: NextAuthOptions = {
       const dbUser = await upsertGoogleUser((profile ?? {}) as GoogleProfileLike);
       return Boolean(dbUser);
     },
-    jwt: async ({ token, user, account, profile }) => {
+    jwt: async ({ token, user, account, profile, trigger }) => {
       if (account?.provider === "google") {
         // For Google the session must carry OUR user id, not Google's account id.
         const dbUser = await upsertGoogleUser((profile ?? {}) as GoogleProfileLike);
@@ -58,6 +69,14 @@ export const authOptions: NextAuthOptions = {
         }
       } else if (user) {
         token.id = user.id;
+      }
+
+      // Load the claimed hero name at sign-in and whenever the client calls session update()
+      // (done right after claiming), not on every request.
+      if (token.id && (user || account || trigger === "update")) {
+        const hero = await getHeroName(token.id);
+        token.heroName = hero?.name ?? null;
+        if (hero) token.name = hero.name;
       }
       return token;
     },

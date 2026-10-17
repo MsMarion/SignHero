@@ -9,13 +9,6 @@ export interface GoogleProfileLike {
   picture?: string | null;
 }
 
-/** Hero names are 2-20 characters (same limits as user.register and user.updateProfile). */
-export function heroNameFromProfile(profile: GoogleProfileLike): string {
-  const raw = (profile.given_name ?? profile.name ?? profile.email?.split("@")[0] ?? "").trim();
-  const name = raw.slice(0, 20);
-  return name.length >= 2 ? name : "Hero";
-}
-
 /**
  * Finds the user for a Google-verified email, or creates one.
  *
@@ -37,10 +30,10 @@ export async function upsertGoogleUser(profile: GoogleProfileLike) {
   }
 
   try {
+    // No display name here: the player picks a hero name (once, permanently) on their first sign-in.
     return await db.user.create({
       data: {
         email,
-        displayName: heroNameFromProfile(profile),
         image: profile.picture ?? undefined,
       },
     });

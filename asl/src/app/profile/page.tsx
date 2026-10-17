@@ -11,7 +11,6 @@ export default function ProfilePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   
-  const [heroName, setHeroName] = useState("");
   const [geminiApiKey, setGeminiApiKey] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
 
@@ -28,7 +27,6 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (userData) {
-      setHeroName(userData.displayName ?? "");
       setGeminiApiKey(userData.geminiApiKey ?? "");
     }
   }, [userData]);
@@ -49,7 +47,7 @@ export default function ProfilePage() {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    updateMutation.mutate({ heroName, geminiApiKey });
+    updateMutation.mutate({ geminiApiKey });
   };
 
   return (
@@ -85,14 +83,16 @@ export default function ProfilePage() {
                 <Shield size={14} />
                 <label className="text-[10px] uppercase tracking-[3px] font-bold">Hero Name</label>
               </div>
-              <input
-                type="text"
-                value={heroName}
-                onChange={(e) => setHeroName(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-white focus:outline-none focus:ring-2 focus:ring-fuchsia-500/50 transition-all font-bold tracking-wide"
-                placeholder="Pick your identity..."
-              />
-              <p className="text-[9px] text-white/30 ml-1 font-medium italic">This is how you appear on global leaderboards.</p>
+              <div
+                data-testid="profile-hero-name"
+                className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-white font-bold tracking-wide flex items-center justify-between"
+              >
+                <span>{userData?.heroName ?? "Not chosen yet"}</span>
+                {userData?.heroName && <span className="text-[9px] uppercase tracking-[3px] text-amber-300">Locked</span>}
+              </div>
+              <p className="text-[9px] text-white/30 ml-1 font-medium italic">
+                This is how you appear on global leaderboards. It was chosen once and cannot be changed.
+              </p>
             </div>
 
             {/* API Key Section */}

@@ -267,7 +267,10 @@ const LeaderboardPage = () => {
                           leaderboardData.map((entry, index) => (
                             <div key={entry.id} className="grid grid-cols-3 gap-4 items-center text-xs md:text-sm font-mono py-1 hover:bg-fuchsia-500/10 transition-colors rounded" style={{ animation: `fadeSlideIn 0.5s ease-out ${index * 0.1}s both` }}>
                               <div className="flex items-center"><RankBadge rank={entry.rank} /></div>
-                              <div className={`${getNameColor(index)} font-bold tracking-wide truncate`} style={{ textShadow: '0 0 8px currentColor' }}>{entry.name}</div>
+                              <div className={`${getNameColor(index)} font-bold tracking-wide truncate`} style={{ textShadow: '0 0 8px currentColor' }}>
+                                {entry.name}
+                                {!entry.userId && <span className="ml-2 align-middle text-[9px] font-normal uppercase tracking-[2px] text-white/40" style={{ textShadow: 'none' }}>guest</span>}
+                              </div>
                               <div className="text-right text-cyan-300" style={{ textShadow: '0 0 8px #2de2e6' }}>{entry.score.toLocaleString()}</div>
                             </div>
                           ))

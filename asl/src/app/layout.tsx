@@ -36,6 +36,7 @@ import { MenuContainerWrapper } from "./_components/MenuContainerWrapper";
 
 import { ScaledContainer } from "~/components/ScaledContainer";
 import { AuthProvider } from "./_components/auth-provider";
+import { HeroNameGate } from "./_components/HeroNameGate";
 
 export default function RootLayout({
   children,
@@ -46,6 +47,7 @@ export default function RootLayout({
         <ScaledContainer>
           <UnifiedBackground />
           <AuthProvider>
+            <HeroNameGate />
             <BackgroundMusic />
             <TopHUD />
             <Navbar />
