@@ -24,6 +24,25 @@ export function useWebcam(): UseWebcamReturn {
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const [hasStream, setHasStream] = useState(false);
+
+  // The <video> element can mount after the camera stream resolves (e.g. WebcamFeed only
+  // renders once a game leaves "idle"), so attach the stream whenever the element appears.
+  useEffect(() => {
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    if (!hasStream || !video || !stream) return;
+    if (video.srcObject !== stream) {
+      video.srcObject = stream;
+    }
+    const markReady = () => setIsReady(true);
+    if (video.readyState >= 1) {
+      markReady();
+      return;
+    }
+    video.addEventListener("loadedmetadata", markReady);
+    return () => video.removeEventListener("loadedmetadata", markReady);
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -46,16 +65,8 @@ export function useWebcam(): UseWebcamReturn {
         }
 
         streamRef.current = stream;
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.onloadedmetadata = () => {
-            if (mounted) {
-              setIsReady(true);
-              setError(null);
-            }
-          };
-        }
+        setHasStream(true);
+        setError(null);
       } catch (err) {
         if (!mounted) return;
 
