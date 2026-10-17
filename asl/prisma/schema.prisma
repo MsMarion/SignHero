@@ -42,7 +42,9 @@ model LeaderboardEntry {
 
 model User {
   id            String    @id @default(auto()) @map("_id") @db.ObjectId
-  name          String?   @unique
+  // Not unique: accounts are identified by email, and a unique index on an optional field makes
+  // MongoDB reject every second user that has no name (null collides with null).
+  name          String?
   displayName   String?   // The name shown on scorecards
   email         String?   @unique
   password      String?   // Hashed password
