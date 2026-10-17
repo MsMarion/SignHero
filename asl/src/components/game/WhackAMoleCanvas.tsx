@@ -67,10 +67,13 @@ export function WhackAMoleCanvas({ onStateChange }: WhackAMoleCanvasProps = {}) 
     }, [gameState, playBackgroundMusic, stopBackgroundMusic]);
 
     const { videoRef, canvasRef, isReady, error, captureFrame } = useWebcam();
+    // Keep detection (WebSocket + MediaPipe) alive for the whole game. It used to run only while
+    // "playing", so every round's cooldown tore it down and rebuilt it, which caused the stutter.
+    // Scoring still only counts in "playing" (see isPlaying below).
     const { predictions, isConnected, handDetected, latency } = useSignDetection(
         videoRef,
         isReady,
-        gameState === "playing"
+        gameState === "starting" || gameState === "playing" || gameState === "cooldown"
     );
 
     const { holdProgress, latestPrediction } = useAIInteraction({
