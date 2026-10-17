@@ -145,8 +145,8 @@ asl/
 
 ```bash
 # Clone the repository
-git clone https://github.com/MsMarion/ASL-Fun-Training.git
-cd ASL-Fun-Training/asl
+git clone https://github.com/MsMarion/SignHero.git
+cd SignHero/asl
 
 # Install dependencies
 pnpm install

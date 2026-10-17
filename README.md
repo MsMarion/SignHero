@@ -76,7 +76,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed system diagrams.
 ## 📁 Project Structure
 
 ```
-ASL-Fun-Training/
+SignHero/
 │
 ├── asl/                              # 🎮 Next.js Frontend Application
 │   ├── src/
@@ -124,14 +124,16 @@ ASL-Fun-Training/
 
 ```bash
 # Navigate to project root
-cd ASL-Fun-Training
+cd SignHero
 
-# Create Python virtual environment
+# Create a Python 3.10 or 3.11 virtual environment (mediapipe 0.10.9 does not support 3.12+)
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
-# Install dependencies
-pip install torch torchvision torchaudio opencv-python mediapipe fastapi uvicorn websockets python-multipart
+# Install PyTorch with the CUDA build for your GPU (cu126 works on Pascal, e.g. GTX 1070;
+# use cu128 for RTX 50-series), then the pinned backend dependencies
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+pip install -r backend/requirements.txt
 
 # Start the API server
 python api_server_http.py
@@ -153,7 +155,7 @@ cp .env.example .env
 
 # Start dev server
 pnpm dev
-# App runs at http://localhost:3000
+# App runs at http://localhost:4000
 ```
 
 ### One-Click Startup
