@@ -19,6 +19,7 @@
         "preview": "next build && next start",
         "start": "next start",
         "test:account": "tsx --test \"tests/account/*.test.ts\"",
+        "test:unit": "tsx --test \"tests/unit/*.test.ts\"",
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {

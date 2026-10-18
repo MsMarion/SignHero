@@ -20,7 +20,7 @@ Exit code 0 means every check passed (skips allowed); 1 means at least one faile
 | websocket round trip is fast enough | slow or stalled inference path (median budget `SMOKE_LATENCY_MS`, default 400 ms) |
 | backend answers every frame, even back to back | the old bug where fast frames got no reply and the page froze (shows up on low-latency links, i.e. locally) |
 | `player.create` works | database or replica-set problems (only with `SMOKE_WRITE=1`, because it writes a `SMOKE TEST` player) |
-| browser game | headless Chrome with a fake camera: camera goes LIVE, frames flow to the backend and replies come back, four keyboard-driven rounds happen over **one** socket (not one per round), and there are no console errors or uncaught exceptions |
+| browser game | headless Chrome with a fake camera: the camera goes LIVE, frames flow and replies come back; the test then **closes the page's own detection socket** (what a deploy restart looks like to a player; nothing on the server is touched, so it is safe in production) and the page must reconnect by itself and resume replies; four keyboard-driven rounds then happen over that **one** reconnected socket (not a new one per round); no console errors or uncaught exceptions |
 
 ## Running on a slow machine (CI)
 The browser check is built to tolerate slow browsers: on a shared GitHub runner Chrome renders in software and MediaPipe's load can stretch

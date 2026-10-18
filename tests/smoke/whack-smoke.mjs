@@ -218,7 +218,7 @@ await check('player.create works (SMOKE_WRITE=1)', async () => {
   return `created ${id}`;
 });
 
-await check('browser game: camera goes live, frames flow, rounds do not reconnect', async () => {
+await check('browser game: camera live, frames flow, a dropped connection recovers, rounds do not reconnect', async () => {
   if (BROWSER === '0') throw new Skip('skipped: SMOKE_BROWSER=0');
   return withChrome(async ({ send, evaluate, events }) => {
     await send('Runtime.enable'); await send('Page.enable');
@@ -233,6 +233,7 @@ await check('browser game: camera goes live, frames flow, rounds do not reconnec
           const w = new OW(u, p);
           if (String(u).includes('/ws/predict')) {
             bump('opens');
+            (window.__socks = window.__socks || []).push(w);
             const s = w.send.bind(w); w.send = (d) => { bump('sends'); s(d); };
             w.addEventListener('message', (e) => { try { if (JSON.parse(e.data).letter !== undefined) bump('msgs'); } catch {} });
           }
@@ -261,6 +262,7 @@ await check('browser game: camera goes live, frames flow, rounds do not reconnec
       await sleep(1000);
       return evaluate(`document.body.innerText.includes('TIMER')`);
     }, 45000, 'the game to start after clicking Start');
+    const readCounters = async () => JSON.parse((await evaluate("sessionStorage.getItem('__smoke') || '{}'")) || '{}');
     try {
       await waitFor(() => evaluate(`document.body.innerText.includes('LIVE')`), 45000, 'the camera feed to go LIVE');
     } catch (err) {
@@ -269,6 +271,17 @@ await check('browser game: camera goes live, frames flow, rounds do not reconnec
         .map((e) => e.params.args.map((a) => a.value ?? a.description ?? '').join(' ').slice(0, 120)).slice(0, 3);
       throw new Error(`${err.message}. Page shows: "${text}". Console errors: ${JSON.stringify(errs)}`);
     }
+
+    // A dropped connection must heal by itself (this is what a deploy restart looks like to a player).
+    // The test closes ITS OWN socket from the page, so nothing on the server is touched and it is safe in production.
+    await waitFor(async () => ((await readCounters()).sends || 0) >= 1, 60000, 'the first frame to be sent')
+      .catch(async (err) => { throw new Error(`${err.message}. ${await pageDiag(evaluate, events)}`); });
+    const beforeDrop = await readCounters();
+    await evaluate('window.__socks[window.__socks.length - 1].close()');
+    await waitFor(async () => ((await readCounters()).opens || 0) >= (beforeDrop.opens || 1) + 1, 30000, 'the page to reconnect after its connection was dropped')
+      .catch(async (err) => { throw new Error(`${err.message}. ${await pageDiag(evaluate, events)}`); });
+    await waitFor(async () => ((await readCounters()).msgs || 0) > (beforeDrop.msgs || 0), 45000, 'replies to resume after the reconnect')
+      .catch(async (err) => { throw new Error(`${err.message}. ${await pageDiag(evaluate, events)}`); });
 
     // Play several rounds with the keyboard fallback, which forces cooldown -> playing transitions.
     // The first round can be slow to start: on a CI runner (software rendering) MediaPipe's load stretches the
@@ -281,7 +294,6 @@ await check('browser game: camera goes live, frames flow, rounds do not reconnec
       hits++;
       await sleep(1800); // 1 s cooldown + next target
     }
-    const readCounters = async () => JSON.parse((await evaluate("sessionStorage.getItem('__smoke') || '{}'")) || '{}');
     // A desktop sends a frame every few tens of ms; software rendering on a shared CI runner can be
     // far slower. Wait (briefly) for a few frames rather than expecting a rate.
     await waitFor(async () => ((await readCounters()).sends || 0) >= 3, 40000, 'a few frames to be sent').catch(() => {});
@@ -293,12 +305,12 @@ await check('browser game: camera goes live, frames flow, rounds do not reconnec
       .filter((e) => e.method === 'Runtime.exceptionThrown')
       .map((e) => String(e.params.exceptionDetails.exception?.description || e.params.exceptionDetails.text || 'unknown').split(/\r?\n/).slice(0, 3).join(' | ').slice(0, 260));
 
-    assert(s.opens === 1, `opened ${s.opens} detection sockets over ${hits} rounds (expected 1; it reconnects every round)`);
+    assert(s.opens === 2, `opened ${s.opens} detection sockets (expected 2: the first, plus one reconnect after the dropped connection; more means it reconnects every round, fewer means it did not reconnect)`);
     assert(s.sends >= 3, `only ${s.sends} frames sent to the backend`);
     assert(s.msgs >= 3 && s.msgs >= s.sends - 2, `only ${s.msgs} replies received (sent ${s.sends})`);
     assert(consoleErrors.length === 0, `console errors: ${consoleErrors.slice(0, 3).join(' | ')}`);
     assert(exceptions.length === 0, `${exceptions.length} uncaught page exceptions: ${exceptions.join(' || ')}`);
-    return `${hits} rounds, 1 socket, ${s.sends} frames sent, ${s.msgs} replies, 0 console errors`;
+    return `dropped connection recovered, ${hits} rounds on 1 reconnected socket, ${s.sends} frames sent, ${s.msgs} replies, 0 console errors`;
   });
 });
 

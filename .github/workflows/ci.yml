@@ -36,6 +36,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Type check
         run: pnpm exec tsc --noEmit
+      - name: Unit tests (no database)
+        run: pnpm test:unit
       - name: Production build
         env:
           SKIP_ENV_VALIDATION: "1"
