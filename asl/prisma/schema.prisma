@@ -77,6 +77,10 @@ model Player {
   commonMistakes      CommonMistake[]
   createdAt           DateTime        @default(now())
   v                   Int             @default(0) @map("__v")
+  // Set when the game starts; the server checks the finished result against them (see score-validation.ts).
+  userId              String?         @db.ObjectId
+  ipKey               String?
+  finalizedAt         DateTime?
 }
 
 type Interaction {

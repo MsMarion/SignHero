@@ -1,11 +1,12 @@
 import { z } from "zod";
-import { createTRPCRouter, publicProcedure, protectedProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, publicProcedure, protectedProcedure, rateLimit } from "~/server/api/trpc";
 import { db } from "~/server/db";
 import bcrypt from "bcryptjs";
 import { TRPCError } from "@trpc/server";
 
 export const userRouter = createTRPCRouter({
   register: publicProcedure
+    .use(rateLimit({ limit: 5, windowMs: 10 * 60_000 }))
     .input(
       z.object({
         email: z.string().email(),

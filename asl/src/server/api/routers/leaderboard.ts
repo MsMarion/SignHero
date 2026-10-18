@@ -1,14 +1,18 @@
 import { TRPCError } from "@trpc/server";
 import { db } from "~/server/db";
-import { createTRPCRouter, publicProcedure } from "../trpc";
+import { createTRPCRouter, publicProcedure, rateLimit } from "../trpc";
 import { z } from "zod";
 import { resolveScoreIdentity } from "~/server/score-identity";
 
+// Song-mode scores are computed by the client and are not verified yet; this only stops absurd values.
+// Whack-A-Sign scores no longer come through here: player.updateFinalStats validates and records them.
+const MAX_SONG_SCORE = 1_000_000;
+
 const createEntrySchema = z.object({
     name: z.string().min(1, "Name is required").max(20, "Name too long"),
-    score: z.number().int().min(0, "Score must be non-negative"),
-    playerId: z.string().optional(),
-    songId: z.string().optional(),
+    score: z.number().int().min(0, "Score must be non-negative").max(MAX_SONG_SCORE, "Score too high"),
+    // Required: a score with no song would land on the Whack-A-Sign board, which only the server may write.
+    songId: z.string().regex(/^[0-9a-f]{24}$/, "Invalid song id"),
 });
 
 export const leaderboardRouter = createTRPCRouter({
@@ -80,20 +84,21 @@ export const leaderboardRouter = createTRPCRouter({
         }),
 
     create: publicProcedure
+        .use(rateLimit({ limit: 10, windowMs: 60_000 }))
         .input(createEntrySchema)
         .mutation(async ({ input, ctx }) => {
             // Resolve who this score belongs to before the try block, so a refusal is not turned into a 500.
             const identity = await resolveScoreIdentity(ctx.session, input.name);
             try {
-                const count = await db.leaderboardEntry.count({
-                    where: input.songId ? { songId: input.songId } : {},
-                });
+                const song = await db.song.findUnique({ where: { id: input.songId }, select: { id: true } });
+                if (!song) {
+                    throw new TRPCError({ code: "NOT_FOUND", message: "Song not found" });
+                }
 
                 const entry = await db.leaderboardEntry.create({
                     data: {
                         name: identity.name.toUpperCase(),
                         score: input.score,
-                        playerId: input.playerId,
                         songId: input.songId,
                         userId: identity.userId,
                     },
@@ -102,7 +107,7 @@ export const leaderboardRouter = createTRPCRouter({
                 const higherScores = await db.leaderboardEntry.count({
                     where: {
                         score: { gt: input.score },
-                        ...(input.songId ? { songId: input.songId } : {}),
+                        songId: input.songId,
                     },
                 });
 
@@ -111,79 +116,11 @@ export const leaderboardRouter = createTRPCRouter({
                     rank: higherScores + 1,
                 };
             } catch (error) {
+                if (error instanceof TRPCError) throw error;
                 console.error("Error creating leaderboard entry:", error);
                 throw new TRPCError({
                     code: "INTERNAL_SERVER_ERROR",
                     message: "Failed to create leaderboard entry",
-                });
-            }
-        }),
-
-    upsert: publicProcedure
-        .input(createEntrySchema)
-        .mutation(async ({ input, ctx }) => {
-            // Resolve who this score belongs to before the try block, so a refusal is not turned into a 500.
-            const identity = await resolveScoreIdentity(ctx.session, input.name);
-            try {
-                const normalizedName = identity.name.toUpperCase();
-
-                // CRITICAL: Use playerId or name, scoped strictly by songId
-                const existingEntry = input.playerId 
-                    ? await db.leaderboardEntry.findFirst({
-                        where: { playerId: input.playerId, songId: input.songId ?? null },
-                      })
-                    : await db.leaderboardEntry.findFirst({
-                        where: { name: normalizedName, songId: input.songId ?? null },
-                      });
-
-                let entry;
-
-                if (existingEntry) {
-                    // Entry exists - only update if new score is higher
-                    if (input.score > existingEntry.score) {
-                        entry = await db.leaderboardEntry.update({
-                            where: { id: existingEntry.id },
-                            data: {
-                                score: input.score,
-                                name: normalizedName,
-                                userId: identity.userId,
-                            },
-                        });
-                        console.log(`✅ Updated ${normalizedName} on song ${input.songId}: ${existingEntry.score} → ${input.score}`);
-                    } else {
-                        entry = existingEntry;
-                        console.log(`ℹ️ Kept high score for ${normalizedName} on song ${input.songId}: ${existingEntry.score}`);
-                    }
-                } else {
-                    // New entry
-                    entry = await db.leaderboardEntry.create({
-                        data: {
-                            name: normalizedName,
-                            score: input.score,
-                            playerId: input.playerId,
-                            songId: input.songId,
-                            userId: identity.userId,
-                        },
-                    });
-                    console.log(`✅ Created new entry for ${normalizedName} on song ${input.songId}: ${input.score}`);
-                }
-
-                const higherScores = await db.leaderboardEntry.count({
-                    where: {
-                        score: { gt: entry.score },
-                        ...(input.songId ? { songId: input.songId } : {}),
-                    },
-                });
-
-                return {
-                    ...entry,
-                    rank: higherScores + 1,
-                };
-            } catch (error) {
-                console.error("Error upserting leaderboard entry:", error);
-                throw new TRPCError({
-                    code: "INTERNAL_SERVER_ERROR",
-                    message: "Failed to upsert leaderboard entry",
                 });
             }
         }),

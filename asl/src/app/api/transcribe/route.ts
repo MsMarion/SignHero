@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { downloadAudioBuffer } from "~/lib/youtube";
 import { env } from "~/env";
+import { devmodeGuard } from "~/server/devmode-guard";
 
 const apiKey = env.GEMINI_API_KEY;
 const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
@@ -15,6 +16,9 @@ const model = genAI ? genAI.getGenerativeModel({
 }) : null;
 
 export async function POST(request: Request) {
+  const disabled = devmodeGuard();
+  if (disabled) return disabled;
+
     if (!genAI || !model) {
         return NextResponse.json(
             { success: false, error: "GEMINI_API_KEY is not configured" },

@@ -210,7 +210,7 @@ await check('player.create works (SMOKE_WRITE=1)', async () => {
   if (!WRITE) throw new Skip('skipped: writes a record; set SMOKE_WRITE=1');
   const r = await fetch(`${BASE}/api/trpc/player.create?batch=1`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ 0: { json: { name: 'SMOKE TEST', score: 0, avgReactionTime: 0, mistakesMade: 0, correctHits: 0 } } }),
+    body: JSON.stringify({ 0: { json: { name: 'SMOKE TEST' } } }),
   });
   const j = await r.json();
   const id = j?.[0]?.result?.data?.json?.id;

@@ -15,7 +15,8 @@ const MODES: GameMode[] = [
   { id: "community", title: "COMMUNITY", href: "/community" },
   { id: "official", title: "OFFICIAL SONGS", href: "/songselection" },
   { id: "whack", title: "WHACK-A-SIGN", href: "/whack" },
-  { id: "dev", title: "DEV MODE", href: "/devmode" },
+  // Song import tools are off in production (see server/devmode-guard.ts).
+  ...(process.env.NODE_ENV !== "production" ? [{ id: "dev", title: "DEV MODE", href: "/devmode" }] : []),
 ];
 
 export function GameModeCarousel() {

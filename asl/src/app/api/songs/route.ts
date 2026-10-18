@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "~/server/db";
+import { devmodeGuard } from "~/server/devmode-guard";
 
 export async function POST(request: Request) {
+  const disabled = devmodeGuard();
+  if (disabled) return disabled;
+
     try {
         const { albumName, songName, thumbnailName, interactions } =
             await request.json();
@@ -27,6 +31,9 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
+  const disabled = devmodeGuard();
+  if (disabled) return disabled;
+
     try {
         const songs = await db.song.findMany({
             orderBy: { createdAt: "desc" },

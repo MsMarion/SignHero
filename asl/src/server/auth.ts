@@ -1,11 +1,21 @@
 import { getServerSession, type NextAuthOptions, type DefaultSession } from "next-auth";
-import CredentialsProvider from "next-auth/providers/credentials";
-import GoogleProvider from "next-auth/providers/google";
+import CredentialsProviderImport from "next-auth/providers/credentials";
+import GoogleProviderImport from "next-auth/providers/google";
 import { db } from "~/server/db";
 import { env } from "~/env";
 import { upsertGoogleUser, type GoogleProfileLike } from "~/server/auth-google";
 import { getHeroName } from "~/server/hero-name";
 import bcrypt from "bcryptjs";
+import { createRateLimiter, getClientKey } from "~/server/rate-limit";
+
+// Password guessing: 10 attempts per address per 10 minutes, and 5 per email per 10 minutes.
+const loginByAddress = createRateLimiter({ limit: 10, windowMs: 10 * 60_000 });
+const loginByEmail = createRateLimiter({ limit: 5, windowMs: 10 * 60_000 });
+
+// next-auth ships CommonJS; run under plain Node (the account tests) the default import is the module object.
+const unwrap = <T,>(m: T): T => ((m as unknown as { default?: T }).default ?? m);
+const CredentialsProvider = unwrap(CredentialsProviderImport);
+const GoogleProvider = unwrap(GoogleProviderImport);
 
 /** Google sign-in is only offered when both OAuth values are configured. */
 const googleEnabled = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
@@ -88,8 +98,16 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Login Email", type: "text", placeholder: "hero@asl.com" },
         password: { label: "Password", type: "password" }
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) {
+          return null;
+        }
+
+        const headers = new Headers(Object.entries(req?.headers ?? {}).map(([k, v]) => [k, String(v)] as [string, string]));
+        if (
+          !loginByAddress.check(getClientKey(headers)).ok ||
+          !loginByEmail.check(credentials.email.trim().toLowerCase()).ok
+        ) {
           return null;
         }
 
