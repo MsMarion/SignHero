@@ -25,9 +25,8 @@ export function reportClientError(
     build: process.env.NEXT_PUBLIC_BUILD_SHA,
   });
   try {
-    if (!navigator.sendBeacon?.("/api/client-error", new Blob([body], { type: "application/json" }))) {
-      void fetch("/api/client-error", { method: "POST", body, keepalive: true, headers: { "content-type": "application/json" } });
-    }
+    // keepalive lets the request finish even if the page is being closed or navigated away
+    void fetch("/api/client-error", { method: "POST", body, keepalive: true, headers: { "content-type": "application/json" } }).catch(() => undefined);
   } catch {
     /* reporting must never throw */
   }

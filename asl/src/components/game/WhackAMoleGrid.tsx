@@ -43,6 +43,8 @@ export function WhackAMoleGrid({ availableLetters, targetLetter, onInteract, hol
                 return (
                     <div
                         key={letter}
+                        data-testid={`tile-${letter}`}
+                        data-target={isTarget ? "true" : undefined}
                         onClick={() => onInteract(letter)}
                         className={`
                             relative aspect-square flex flex-col items-center justify-center rounded-3xl transition-all duration-300 cursor-pointer overflow-hidden backdrop-blur-xl border border-white/10 group
