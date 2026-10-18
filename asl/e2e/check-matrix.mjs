@@ -17,7 +17,7 @@ for (const file of readdirSync(specDir).filter((f) => f.endsWith(".spec.ts"))) {
   const text = readFileSync(join(specDir, file), "utf8");
   for (const m of text.matchAll(idPattern)) {
     // only IDs in test titles and the id arrays: skip things like "UTF-8" (no match: needs two digits) and "A-Y"
-    if (/^[GHWLANPSDMOT]$/.test(m[1])) used.add(`${m[1]}-${m[2]}`);
+    if (/^[GHWLANPSDMOTF]$/.test(m[1])) used.add(`${m[1]}-${m[2]}`);
   }
 }
 

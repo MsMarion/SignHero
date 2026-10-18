@@ -68,6 +68,18 @@ describe("finishing a game", () => {
     assert.equal(entries[0]!.userId, null);
   });
 
+  test("a practice game (taps on a phone) is recorded for its report but never put on the leaderboard", async () => {
+    const ip = freshIp();
+    const p = await start(ip, `P${runTag}`.slice(0, 20));
+    await backdate(p.id);
+    const done = await caller(ip).player.updateFinalStats({ ...stats(p.id), practice: true });
+    assert.equal(done.practice, true);
+    assert.equal(done.score, 9600);
+    assert.equal(await db.leaderboardEntry.count({ where: { playerId: p.id } }), 0);
+    // it is still finished once, like any game
+    await assert.rejects(caller(ip).player.updateFinalStats({ ...stats(p.id), practice: false }), { code: "CONFLICT" });
+  });
+
   test("a second submission for the same game is refused", async () => {
     const ip = freshIp();
     const p = await start(ip, `H${runTag}`.slice(0, 20));

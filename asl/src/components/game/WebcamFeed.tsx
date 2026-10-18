@@ -7,6 +7,8 @@ interface WebcamFeedProps {
   error: string | null;
   isConnected: boolean;
   handDetected: boolean;
+  /** Fill the width of the parent (phones) instead of the fixed 320 x 240 box. */
+  fluid?: boolean;
 }
 
 /**
@@ -20,6 +22,7 @@ export function WebcamFeed({
   error,
   isConnected,
   handDetected,
+  fluid = false,
 }: WebcamFeedProps) {
   // Determine connection status color
   const statusColor = error
@@ -39,9 +42,9 @@ export function WebcamFeed({
         : "Connected";
 
   return (
-    <div className="relative group">
+    <div className={`relative group ${fluid ? "w-full" : ""}`}>
       {/* Premium Cyber Camera Frame */}
-      <div className="relative overflow-hidden rounded-2xl glass-panel border border-fuchsia-500/40 shadow-[0_0_30px_rgba(217,70,239,0.25)] w-[320px] h-[240px] backdrop-blur-md">
+      <div className={`relative overflow-hidden rounded-2xl glass-panel border border-fuchsia-500/40 shadow-[0_0_30px_rgba(217,70,239,0.25)] ${fluid ? "w-full aspect-[16/10]" : "w-[320px] h-[240px]"} backdrop-blur-md`}>
         {/* Glowing Corner Brackets */}
         <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-cyan-400 rounded-tl z-20 pointer-events-none" />
         <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-cyan-400 rounded-tr z-20 pointer-events-none" />

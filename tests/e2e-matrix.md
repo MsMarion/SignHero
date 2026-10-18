@@ -96,6 +96,19 @@ Legend: **page** = what the player sees; **API** = server behaviour the page dep
 | P-03 | profile | save the API key | success message; key is masked on return |
 | P-04 | profile | save fails | the player is told |
 
+## Phone (under 640 px wide; the same site, narrowed)
+
+| ID | Where | Interaction | Expected |
+|---|---|---|---|
+| F-01 | lobby | open on a phone | header on one row, START fits the screen, "prop your phone up" tip shown, the desktop tab arch is not shown |
+| F-02 | lobby | wait | START is disabled ("starting camera") until the camera and hand tracking are ready, then available |
+| F-03 | game | play on a phone | timer, score, hits, the sign to show, the camera and the status line are all on screen; there is no letter grid |
+| F-04 | game | hold the right sign (camera path) | scores and is ranked; no practice note |
+| F-05 | lobby and game | camera refused | the player is told, START is available, the game plays (tapping = practice) |
+| F-06 | whole game | tap the sign | scores, shows "practice", the report says "not on the leaderboard", no leaderboard entry is created |
+| F-07 | sign in, leaderboard | open on a phone | content starts below the compact header and fits the width |
+| W-22 | lobby (not on CI) | hand tracking files cannot be loaded | START still opens up and the game can be played |
+
 ## Songs (none exist in production yet)
 
 | ID | Where | Interaction | Expected |

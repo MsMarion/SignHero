@@ -187,6 +187,11 @@ const LeaderboardPage = () => {
                         <span className="text-cyan-400 text-3xl font-bold font-mono" style={{ textShadow: '0 0 15px #2de2e6' }}>
                           {playerData.name}
                         </span>
+                        {playerData.practice && (
+                          <div data-testid="practice-note" className="mt-2 text-xs font-mono tracking-widest text-yellow-300">
+                            PRACTICE GAME · NOT ON THE LEADERBOARD
+                          </div>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
