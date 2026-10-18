@@ -13,6 +13,7 @@ import { APP_PORT, APP_URL, MOCK_PORT, MOCK_URL, TICKET_SECRET, appEnv } from ".
 export default defineConfig({
   testDir: "./e2e/tests",
   globalSetup: "./e2e/global-setup.ts",
+  globalTimeout: 30 * 60_000,
   fullyParallel: false,
   workers: 1,
   timeout: 60_000,
