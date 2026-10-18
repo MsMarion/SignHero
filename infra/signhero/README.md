@@ -96,9 +96,11 @@ an older release; production stayed healthy and was restored with the manual wor
 After a no-op deploy the run ends red, the rollback job reports that nothing was released, and both hosts must be unchanged afterwards.
 
 ## Known limits
-- **A deploy briefly interrupts live play.** The frontend restart is about 3 seconds (one failed request in a 1-second probe of the public
-  site); the backend swap is about 10 seconds during which the public backend endpoint answers 502. The game does not reconnect its
-  detection WebSocket by itself, so a round in progress at that moment loses detection until the player starts the next game. Prefer quiet times.
+- **A deploy briefly interrupts live play, but players recover by themselves.** The frontend restart is about 3 seconds (one failed request in
+  a 1-second probe of the public site); the backend swap is about 10 seconds during which the public backend endpoint answers 502. The game's
+  detection connection reconnects by itself (retrying after 0.5, 1, 2, 4 and then 5 seconds, with a 4 second stall watchdog for half-open
+  connections), so a round in progress shows RECONNECTING for a few seconds and then carries on; no frames are scored while it is down.
+  The smoke test checks this on every deploy by closing the page's own detection socket and requiring it to reconnect. Still, prefer quiet times.
 - Rollback never restores the database; schema changes must be additive.
 - The Mongo dumps are on CT119's own disk (newest 10 kept), so they do not survive losing that disk.
 - The verb scripts and the CT129 host compose are installed by hand; changing them needs a manual copy to each host.
