@@ -248,7 +248,7 @@ await check('player.create works (SMOKE_WRITE=1)', async () => {
 await check('browser game: camera live, frames flow, a dropped connection recovers, rounds do not reconnect', async () => {
   if (BROWSER === '0') throw new Skip('skipped: SMOKE_BROWSER=0');
   return withChrome(async ({ send, evaluate, events }) => {
-    await send('Runtime.enable'); await send('Page.enable');
+    await send('Runtime.enable'); await send('Page.enable'); await send('Network.enable');
     // Counters live in sessionStorage so they survive the page navigating away (the game ends and
     // redirects to the leaderboard), which a slow CI runner can reach before many frames have flowed.
     await send('Page.addScriptToEvaluateOnNewDocument', { source: `
@@ -335,6 +335,12 @@ await check('browser game: camera live, frames flow, a dropped connection recove
     assert(s.opens === 2, `opened ${s.opens} detection sockets (expected 2: the first, plus one reconnect after the dropped connection; more means it reconnects every round, fewer means it did not reconnect)`);
     assert(s.sends >= 3, `only ${s.sends} frames sent to the backend`);
     assert(s.msgs >= 3 && s.msgs >= s.sends - 2, `only ${s.msgs} replies received (sent ${s.sends})`);
+    // Everything the page loads must come from our own site or backend: no third-party CDN at play time.
+    const ours = new Set([new URL(BASE).host, new URL(API).host]);
+    const requested = events.filter((e) => e.method === 'Network.requestWillBeSent').map((e) => e.params.request.url);
+    const foreign = [...new Set(requested.filter((u) => /^(https?|wss?):/.test(u) && !ours.has(new URL(u).host)).map((u) => new URL(u).host))];
+    assert(foreign.length === 0, `the page contacted other hosts: ${foreign.join(', ')}`);
+    assert(requested.some((u) => u.includes('/mediapipe/hands/')), 'hand tracking files were not loaded from /mediapipe/hands/');
     assert(consoleErrors.length === 0, `console errors: ${consoleErrors.slice(0, 3).join(' | ')}`);
     assert(exceptions.length === 0, `${exceptions.length} uncaught page exceptions: ${exceptions.join(' || ')}`);
     return `dropped connection recovered, ${hits} rounds on 1 reconnected socket, ${s.sends} frames sent, ${s.msgs} replies, 0 console errors`;

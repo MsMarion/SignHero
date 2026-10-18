@@ -6,8 +6,18 @@ import logging.handlers
 import json
 import random
 import asyncio
+
+# One math thread per library. Every frame is tiny, and the default (one thread per core, in torch, OpenCV and the
+# BLAS libraries) makes them fight each other and the asyncio loop for the same cores: on a 32-thread desktop it
+# burned ten cores for about 20% less throughput (tests/load/ws_load.py). Set before torch is imported.
+for _var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
+
 import torch
 import cv2
+
+cv2.setNumThreads(1)
+torch.set_num_threads(int(os.environ["OMP_NUM_THREADS"]))
 import numpy as np
 import mediapipe as mp
 from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect

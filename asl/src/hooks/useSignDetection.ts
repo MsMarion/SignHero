@@ -203,7 +203,8 @@ export function useSignDetection(
       try {
         const { Hands } = await import("@mediapipe/hands");
         const hands = new Hands({
-          locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+          // Served by this site (scripts/copy-mediapipe.mjs), not a third-party CDN.
+          locateFile: (file: string) => `/mediapipe/hands/${file}`,
         });
 
         hands.setOptions({
