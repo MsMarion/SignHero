@@ -14,6 +14,15 @@ const config = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  async headers() {
+    return [
+      {
+        // MediaPipe runtime copied from node_modules (scripts/copy-mediapipe.mjs); a day of caching is plenty.
+        source: "/mediapipe/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=86400" }],
+      },
+    ];
+  },
 };
 
 export default config;

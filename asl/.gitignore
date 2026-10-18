@@ -16,6 +16,9 @@ db.sqlite
 # next.js
 /.next/
 /.next-*/
+
+# generated from node_modules by scripts/copy-mediapipe.mjs
+/public/mediapipe/
 /out/
 next-env.d.ts
 
