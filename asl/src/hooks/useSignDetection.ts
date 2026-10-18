@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type SignPrediction } from "~/lib/gameScoring";
+import { reconnectDelayMs, STALL_MS } from "~/lib/reconnect";
 
 export interface UseSignDetectionReturn {
   predictions: SignPrediction[];
@@ -33,6 +34,7 @@ export function useSignDetection(
   const handsRef = useRef<any | null>(null);
   const animFrameRef = useRef<number>(0);
   const isSendingRef = useRef<boolean>(false);
+  const lastSendAtRef = useRef<number>(0); // when the frame now in flight was sent (stall watchdog)
 
   const addPrediction = useCallback((pred: SignPrediction) => {
     predictionsSyncRef.current.push(pred);
@@ -43,60 +45,133 @@ export function useSignDetection(
     setHandDetected(true);
   }, []);
 
-  // Initialize WebSocket connection
+  // WebSocket connection to the detection backend, kept alive for as long as detection is enabled:
+  // if it drops (a deploy restart, a network blip, a half-open connection) it reconnects with a growing delay.
   useEffect(() => {
     if (!enabled) return;
 
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:4001/ws/predict";
-    console.log(`Connecting WebSocket to: ${wsUrl}`);
-    
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+    let disposed = false; // set by the cleanup: no handler may act or reconnect after it
+    let attempt = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
-    ws.onopen = () => {
-      console.log("WebSocket connected successfully");
-      setIsConnected(true);
+    const scheduleReconnect = () => {
+      if (disposed || retryTimer) return;
+      attempt += 1;
+      const delay = reconnectDelayMs(attempt);
+      console.log(`WebSocket reconnecting in ${delay} ms (attempt ${attempt})`);
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        connect();
+      }, delay);
     };
 
-    ws.onclose = () => {
-      console.log("WebSocket disconnected");
-      setIsConnected(false);
-    };
-
-    ws.onerror = (err) => {
-      console.error("WebSocket error:", err);
-      setIsConnected(false);
-    };
-
-    ws.onmessage = (event: MessageEvent) => {
+    // Give up on a socket we no longer trust (the server went quiet) and start over.
+    const dropAndReconnect = (ws: WebSocket) => {
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.onmessage = null;
       try {
-        isSendingRef.current = false; // Acknowledge receipt (One-in-Flight)
-        const data = JSON.parse(event.data as string);
-
-        if (data.type === "ready" || data.type === "error") {
-          return;
-        }
-
-        if (data.letter !== undefined) {
-          const prediction: SignPrediction = {
-            letter: data.letter,
-            confidence: data.confidence,
-            clientTimestamp: data.clientTimestamp,
-            handDetected: data.handDetected,
-          };
-
-          const now = performance.now() / 1000;
-          setLatency((now - prediction.clientTimestamp) * 1000);
-          addPrediction(prediction);
-        }
-      } catch (e) {
-        console.error("Error parsing WS message:", e);
+        ws.close();
+      } catch {
+        /* already closing */
       }
+      if (wsRef.current === ws) wsRef.current = null;
+      isSendingRef.current = false;
+      setIsConnected(false);
+      scheduleReconnect();
     };
+
+    const connect = () => {
+      if (disposed) return;
+      console.log(attempt === 0 ? `Connecting WebSocket to: ${wsUrl}` : `Reconnecting WebSocket to: ${wsUrl}`);
+
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        if (disposed || wsRef.current !== ws) return;
+        console.log("WebSocket connected successfully");
+        attempt = 0;
+        // Nothing is in flight on a fresh connection. Without this reset, a frame that was waiting
+        // for a reply when the old socket died would keep the "one in flight" flag set forever and
+        // no frame would ever be sent again.
+        isSendingRef.current = false;
+        lastSendAtRef.current = 0;
+        setIsConnected(true);
+      };
+
+      ws.onclose = () => {
+        if (disposed || wsRef.current !== ws) return;
+        console.log("WebSocket disconnected");
+        wsRef.current = null;
+        isSendingRef.current = false;
+        setIsConnected(false);
+        scheduleReconnect();
+      };
+
+      // A failed attempt or a drop is followed by onclose, which drives the reconnect. Warn rather
+      // than error: during an outage every failed attempt would otherwise show up as an app error.
+      ws.onerror = () => {
+        console.warn("WebSocket error (will retry if the connection was lost)");
+      };
+
+      ws.onmessage = (event: MessageEvent) => {
+        try {
+          isSendingRef.current = false; // Acknowledge receipt (One-in-Flight)
+          const data = JSON.parse(event.data as string);
+
+          if (data.type === "ready" || data.type === "error") {
+            return;
+          }
+
+          if (data.letter !== undefined) {
+            const prediction: SignPrediction = {
+              letter: data.letter,
+              confidence: data.confidence,
+              clientTimestamp: data.clientTimestamp,
+              handDetected: data.handDetected,
+            };
+
+            const now = performance.now() / 1000;
+            setLatency((now - prediction.clientTimestamp) * 1000);
+            addPrediction(prediction);
+          }
+        } catch (e) {
+          console.error("Error parsing WS message:", e);
+        }
+      };
+    };
+
+    // Stall watchdog: a connection can look open while the server never answers (half-open after a
+    // network change). If a frame has gone unanswered for STALL_MS, drop it and reconnect.
+    const watchdog = setInterval(() => {
+      const ws = wsRef.current;
+      if (
+        ws &&
+        ws.readyState === WebSocket.OPEN &&
+        isSendingRef.current &&
+        lastSendAtRef.current > 0 &&
+        Date.now() - lastSendAtRef.current > STALL_MS
+      ) {
+        console.warn(`No reply from the detection server for ${STALL_MS} ms; reconnecting`);
+        dropAndReconnect(ws);
+      }
+    }, 1000);
+
+    connect();
 
     return () => {
-      ws.close();
+      disposed = true;
+      clearInterval(watchdog);
+      if (retryTimer) clearTimeout(retryTimer);
+      const ws = wsRef.current;
       wsRef.current = null;
+      if (ws) {
+        ws.onclose = null;
+        ws.onerror = null;
+        ws.close();
+      }
       setIsConnected(false);
     };
   }, [enabled, addPrediction]);
@@ -129,6 +204,7 @@ export function useSignDetection(
 
           if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && !isSendingRef.current) {
             isSendingRef.current = true;
+            lastSendAtRef.current = Date.now();
             const clientTimestamp = performance.now() / 1000;
             const payload = {
               clientTimestamp,

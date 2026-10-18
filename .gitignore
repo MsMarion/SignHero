@@ -35,6 +35,8 @@ downloads/
 eggs/
 .eggs/
 lib/
+# ...but the web app's own source folder is called lib too and must be tracked (new files there were being skipped):
+!asl/src/lib/
 lib64/
 parts/
 sdist/
