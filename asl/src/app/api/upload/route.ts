@@ -7,6 +7,7 @@ import {
     generateUniqueKey,
     getPublicUrl,
 } from "~/lib/s3";
+import { devmodeGuard } from "~/server/devmode-guard";
 
 // Maximum file size (10MB)
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -34,6 +35,9 @@ const ALLOWED_TYPES = [
  * - JSON with { base64: string, filename: string, contentType: string }
  */
 export async function POST(request: NextRequest) {
+  const disabled = devmodeGuard();
+  if (disabled) return disabled;
+
     try {
         const contentType = request.headers.get("content-type") ?? "";
 
@@ -140,6 +144,9 @@ export async function POST(request: NextRequest) {
  * Delete a file from DigitalOcean Spaces
  */
 export async function DELETE(request: NextRequest) {
+  const disabled = devmodeGuard();
+  if (disabled) return disabled;
+
     try {
         const { searchParams } = new URL(request.url);
         const key = searchParams.get("key");
@@ -175,6 +182,9 @@ export async function DELETE(request: NextRequest) {
  * Get a presigned URL for direct upload to DigitalOcean Spaces
  */
 export async function GET(request: NextRequest) {
+  const disabled = devmodeGuard();
+  if (disabled) return disabled;
+
     try {
         const { searchParams } = new URL(request.url);
         const filename = searchParams.get("filename");

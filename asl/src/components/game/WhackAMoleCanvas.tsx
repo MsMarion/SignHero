@@ -39,14 +39,11 @@ export function WhackAMoleCanvas({ onStateChange }: WhackAMoleCanvasProps = {}) 
         showNameModal,
         setShowNameModal,
         createPlayerWithName,
-        recordMistake,
         submitFinalStats,
         resetFinishFlag,
         isCreating,
     } = usePlayerManager();
 
-    const upsertLeaderboardEntry = api.leaderboard.upsert.useMutation();
-    
     // Track if we've already submitted for this game session
     const hasSubmittedLeaderboardRef = useRef(false);
 
@@ -110,20 +107,6 @@ export function WhackAMoleCanvas({ onStateChange }: WhackAMoleCanvasProps = {}) 
             // Submit to player stats
             submitFinalStats(score, metrics);
             
-            // Upsert leaderboard entry (create or update existing)
-            const heroName = session?.user?.name || playerName || "GUEST HERO";
-            upsertLeaderboardEntry.mutate({
-                name: heroName,
-                score: score,
-                playerId: playerId, // Pass playerId to ensure unique entries
-            }, {
-                onSuccess: () => {
-                    console.log("✅ Leaderboard entry saved");
-                },
-                onError: (error) => {
-                    console.error("❌ Failed to save leaderboard entry:", error);
-                }
-            });
         }
 
         // Reset submission flag when returning to idle
@@ -131,7 +114,7 @@ export function WhackAMoleCanvas({ onStateChange }: WhackAMoleCanvasProps = {}) 
             resetFinishFlag();
             hasSubmittedLeaderboardRef.current = false;
         }
-    }, [gameState, playerId, score, metrics, submitFinalStats, resetFinishFlag, playerName, upsertLeaderboardEntry, session]);
+    }, [gameState, playerId, score, metrics, submitFinalStats, resetFinishFlag]);
 
     const handleGridClick = (clickedLetter: string) => {
         if (gameState !== "playing" || !targetLetter || !playerId) return;

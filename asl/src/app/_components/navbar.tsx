@@ -15,7 +15,8 @@ const routes: readonly Route[] = [
   { title: "WHACK-A-SIGN", href: "/whack" },
   { title: "OFFICIAL SONGS", href: "/songselection" },
   { title: "COMMUNITY", href: "/community" },
-  { title: "DEV MODE", href: "/devmode" },
+  // Song import tools are off in production (see server/devmode-guard.ts).
+  ...(process.env.NODE_ENV !== "production" ? [{ title: "DEV MODE", href: "/devmode" } as const] : []),
 ] as const;
 
 const getRoute = (index: number): Route => {

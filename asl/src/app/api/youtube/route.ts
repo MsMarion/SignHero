@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { bulletproofYoutubeImport } from "~/lib/youtube-bridge";
 import { getAudioStream } from "~/lib/youtube";
+import { devmodeGuard } from "~/server/devmode-guard";
 
 // POST - Get video info, download audio, and upload to MinIO
 export async function POST(request: Request) {
+  const disabled = devmodeGuard();
+  if (disabled) return disabled;
+
     try {
         // Request Body Size Limit: reject bodies over 1KB (only expects a short URL)
         const contentLength = request.headers.get("content-length");
@@ -55,13 +59,16 @@ export async function POST(request: Request) {
 
 // GET - Stream the audio
 export async function GET(request: Request) {
+  const disabled = devmodeGuard();
+  if (disabled) return disabled;
+
     try {
         const { searchParams } = new URL(request.url);
         const videoId = searchParams.get("videoId");
 
-        if (!videoId) {
+        if (!videoId || !/^[w-]{11}$/.test(videoId)) {
             return NextResponse.json(
-                { success: false, error: "Video ID required" },
+                { success: false, error: "A valid video ID is required" },
                 { status: 400 }
             );
         }

@@ -23,20 +23,13 @@ export function usePlayerManager() {
 
   // tRPC mutations
   const createPlayer = api.player.create.useMutation();
-  const addMistake = api.player.addMistake.useMutation();
   const updateFinalStats = api.player.updateFinalStats.useMutation();
 
   const createPlayerWithName = useCallback(async (name: string): Promise<string | null> => {
     if (!name.trim()) return null;
 
     try {
-      const result = await createPlayer.mutateAsync({
-        name: name.trim(),
-        score: 0,
-        avgReactionTime: 0,
-        mistakesMade: 0,
-        correctHits: 0,
-      });
+      const result = await createPlayer.mutateAsync({ name: name.trim() });
 
       console.log("✅ Player created:", result.id);
       setPlayerId(result.id);
@@ -46,17 +39,6 @@ export function usePlayerManager() {
       return null;
     }
   }, [createPlayer]);
-
-  const recordMistake = useCallback((clickedLetter: string, expectedLetter: string) => {
-    if (!playerId) return;
-
-    // Fire and forget - don't await
-    addMistake.mutate({
-      playerId,
-      key1: clickedLetter,
-      key2: expectedLetter,
-    });
-  }, [playerId, addMistake]);
 
   const submitFinalStats = useCallback((
     score: number,
@@ -105,7 +87,6 @@ export function usePlayerManager() {
     showNameModal,
     setShowNameModal,
     createPlayerWithName,
-    recordMistake,
     submitFinalStats,
     resetFinishFlag,
     isCreating: createPlayer.isPending,

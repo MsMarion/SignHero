@@ -1,39 +1,36 @@
 import { TRPCError } from "@trpc/server";
 import { db } from "~/server/db";
-import { createTRPCRouter, publicProcedure } from "../trpc";
+import { createTRPCRouter, publicProcedure, rateLimit } from "../trpc";
 import { z } from "zod";
 import { resolveScoreIdentity } from "~/server/score-identity";
+import { getClientKey } from "~/server/rate-limit";
+import { ownsPlayer, validateFinalStats } from "~/server/score-validation";
 
 const createPlayerSchema = z.object({
   name: z.string().min(1).max(20),
+});
+
+const updateFinalStatsSchema = z.object({
+  playerId: z.string().regex(/^[0-9a-f]{24}$/, "Invalid player id"),
   score: z.number().int().min(0),
   avgReactionTime: z.number().min(0),
   mistakesMade: z.number().int().min(0),
   correctHits: z.number().int().min(0),
 });
 
-const addMistakeSchema = z.object({
-  playerId: z.string(),
-  key1: z.string().length(1),
-  key2: z.string().length(1),
-});
-
-const updateFinalStatsSchema = z.object({
-  playerId: z.string(),
-  score: z.number().int().min(0).optional(),
-  avgReactionTime: z.number().min(0),
-  mistakesMade: z.number().int().min(0),
-  correctHits: z.number().int().min(0),
-});
-
-type CommonMistake = {
-  key1: string;
-  key2: string;
-  hits: number;
-};
+/** Never send the owner id or address fields to browsers. */
+function publicPlayer<T extends { userId: string | null; ipKey: string | null }>(player: T) {
+  const { userId: _userId, ipKey: _ipKey, ...rest } = player;
+  return rest;
+}
 
 export const playerRouter = createTRPCRouter({
+  /**
+   * Starts a game. The row is the server's record of "this caller started a game at this time": the score
+   * is not accepted here, only at the end through updateFinalStats.
+   */
   create: publicProcedure
+    .use(rateLimit({ limit: 20, windowMs: 60_000 }))
     .input(createPlayerSchema)
     .mutation(async ({ input, ctx }) => {
       // Signed-in players always play under their claimed hero name; guests cannot take a claimed one.
@@ -42,15 +39,17 @@ export const playerRouter = createTRPCRouter({
         const player = await db.player.create({
           data: {
             name: identity.name.toUpperCase(),
-            score: input.score,
-            avgReactionTime: input.avgReactionTime,
-            mistakesMade: input.mistakesMade,
-            correctHits: input.correctHits,
+            score: 0,
+            avgReactionTime: 0,
+            mistakesMade: 0,
+            correctHits: 0,
             commonMistakes: [],
+            userId: identity.userId,
+            ipKey: getClientKey(ctx.headers),
           },
         });
-        
-        return player;
+
+        return publicPlayer(player);
       } catch (error) {
         console.error("Error creating player:", error);
         throw new TRPCError({
@@ -60,83 +59,68 @@ export const playerRouter = createTRPCRouter({
       }
     }),
 
-  addMistake: publicProcedure
-    .input(addMistakeSchema)
-    .mutation(async ({ input }) => {
+  /**
+   * Finishes a game, once. Checks the caller owns the row and the result is one a real game could produce,
+   * then records it and writes the leaderboard entry from the stored values (the client no longer submits
+   * leaderboard scores for Whack-A-Sign).
+   */
+  updateFinalStats: publicProcedure
+    .use(rateLimit({ limit: 20, windowMs: 60_000 }))
+    .input(updateFinalStatsSchema)
+    .mutation(async ({ input, ctx }) => {
+      const player = await db.player.findUnique({ where: { id: input.playerId } });
+      if (!player) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Player not found" });
+      }
+
+      const caller = { userId: ctx.session?.user?.id ?? null, ipKey: getClientKey(ctx.headers) };
+      if (!ownsPlayer(player, caller)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "This game belongs to someone else" });
+      }
+      if (player.finalizedAt) {
+        throw new TRPCError({ code: "CONFLICT", message: "This game has already been submitted" });
+      }
+
+      // (tsconfig is not strict, so zod infers these as optional; the schema guarantees they are present.)
+      const stats = {
+        score: input.score as number,
+        correctHits: input.correctHits as number,
+        mistakesMade: input.mistakesMade as number,
+        avgReactionTime: input.avgReactionTime as number,
+      };
+      const problem = validateFinalStats(stats, player.createdAt);
+      if (problem) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: problem });
+      }
+
       try {
-        const player = await db.player.findUnique({
-          where: { id: input.playerId },
+        // Claim the single finish atomically so two simultaneous submissions cannot both win.
+        const claimed = await db.player.updateMany({
+          where: {
+            id: player.id,
+            OR: [{ finalizedAt: null }, { finalizedAt: { isSet: false } }],
+          },
+          data: {
+            ...stats,
+            finalizedAt: new Date(),
+          },
         });
-
-        if (!player) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Player not found",
-          });
+        if (claimed.count === 0) {
+          throw new TRPCError({ code: "CONFLICT", message: "This game has already been submitted" });
         }
 
-        const mistakes = player.commonMistakes as CommonMistake[];
-        const existingIndex = mistakes.findIndex(
-          (m) => m.key1 === input.key1 && m.key2 === input.key2
-        );
-
-        let updatedMistakes: CommonMistake[];
-        
-        if (existingIndex !== -1) {
-          updatedMistakes = [...mistakes];
-          const existing = updatedMistakes[existingIndex]!;
-          updatedMistakes[existingIndex] = {
-            ...existing,
-            hits: existing.hits + 1,
-          };
-        } else {
-          updatedMistakes = [
-            ...mistakes,
-            { key1: input.key1, key2: input.key2, hits: 1 },
-          ];
-        }
-
-        const updatedPlayer = await db.player.update({
-          where: { id: input.playerId },
-          data: { commonMistakes: updatedMistakes },
+        await db.leaderboardEntry.create({
+          data: {
+            name: player.name,
+            score: stats.score,
+            playerId: player.id,
+            userId: player.userId,
+          },
         });
 
-        return updatedPlayer;
+        return publicPlayer(await db.player.findUniqueOrThrow({ where: { id: player.id } }));
       } catch (error) {
         if (error instanceof TRPCError) throw error;
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to add mistake",
-        });
-      }
-    }),
-
-  updateFinalStats: publicProcedure
-    .input(updateFinalStatsSchema)
-    .mutation(async ({ input }) => {
-      try {
-        const updateData: {
-          avgReactionTime: number;
-          mistakesMade: number;
-          correctHits: number;
-          score?: number;
-        } = {
-          avgReactionTime: input.avgReactionTime,
-          mistakesMade: input.mistakesMade,
-          correctHits: input.correctHits,
-        };
-
-        if (input.score !== undefined) {
-          updateData.score = input.score;
-        }
-
-        const player = await db.player.update({
-          where: { id: input.playerId },
-          data: updateData,
-        });
-        
-        return player;
-      } catch (error) {
         console.error("Error updating final stats:", error);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
@@ -160,7 +144,7 @@ export const playerRouter = createTRPCRouter({
           });
         }
 
-        return player;
+        return publicPlayer(player);
       } catch (error) {
         if (error instanceof TRPCError) throw error;
         throw new TRPCError({

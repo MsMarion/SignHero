@@ -55,7 +55,7 @@ function OverlayContent({ show, score = 0, songId, songTitle, onRestart, onRedir
         if (show) {
             playGameFinishedSound();
             setErrorMessage("");
-            if (username && !autoSubmitRef.current) {
+            if (username && songId && !autoSubmitRef.current) {
                 autoSubmitRef.current = true;
                 setInitials(username);
                 setSubmissionState("submitting");
@@ -74,7 +74,7 @@ function OverlayContent({ show, score = 0, songId, songTitle, onRestart, onRedir
     }, [show, username, score, songId, playGameFinishedSound]);
 
     const handleSubmit = () => {
-        if (!initials || initials.trim().length === 0) return;
+        if (!songId || !initials || initials.trim().length === 0) return;
         setSubmissionState("submitting");
         submitRef.current({
             name: initials.trim().toUpperCase(),

@@ -12,6 +12,7 @@ import { ZodError } from "zod";
 
 import { db } from "~/server/db";
 import { getServerAuthSession } from "~/server/auth";
+import { createRateLimiter, getClientKey } from "~/server/rate-limit";
 
 /**
  * 1. CONTEXT
@@ -108,6 +109,24 @@ const timingMiddleware = t.middleware(async ({ next, path }) => {
  * are logged in.
  */
 export const publicProcedure = t.procedure.use(timingMiddleware);
+
+/**
+ * Per-client rate limit for a procedure, keyed by address (see getClientKey). Use as
+ * `publicProcedure.use(rateLimit({ limit: 10, windowMs: 60_000 }))`. Each call gets its own counters.
+ */
+export const rateLimit = (opts: { limit: number; windowMs: number }) => {
+  const limiter = createRateLimiter(opts);
+  return t.middleware(({ ctx, next }) => {
+    const result = limiter.check(getClientKey(ctx.headers));
+    if (!result.ok) {
+      throw new TRPCError({
+        code: "TOO_MANY_REQUESTS",
+        message: `Too many requests. Try again in ${Math.ceil(result.retryAfterMs / 1000)} seconds.`,
+      });
+    }
+    return next();
+  });
+};
 
 /**
  * Protected (authenticated) procedure

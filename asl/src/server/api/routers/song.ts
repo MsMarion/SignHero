@@ -2,8 +2,11 @@ import { TRPCError } from "@trpc/server";
 import { db } from "~/server/db";
 import { 
   createTRPCRouter,
-  publicProcedure
+  protectedProcedure,
+  publicProcedure,
+  rateLimit,
 } from "../trpc";
+import { devmodeEnabled } from "~/server/devmode-guard";
 
 import { z } from "zod";
 import { getPublicUrl } from "~/lib/s3";
@@ -124,9 +127,14 @@ export const songRouter = createTRPCRouter({
       }
     }),
 
-  create: publicProcedure
+  // Song import is off in production until songs are reworked (see server/devmode-guard.ts); signed-in only otherwise.
+  create: protectedProcedure
+    .use(rateLimit({ limit: 10, windowMs: 60_000 }))
     .input(createSongSchema)
     .mutation(async ({ input }) => {
+      if (!devmodeEnabled()) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Song creation is disabled" });
+      }
       try {
         // For embedded documents (types), just assign the array directly
         // Explicitly type the interactions to match Prisma's expected type
