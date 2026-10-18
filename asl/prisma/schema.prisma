@@ -42,14 +42,29 @@ model LeaderboardEntry {
 
 model User {
   id            String    @id @default(auto()) @map("_id") @db.ObjectId
-  name          String?   @unique
+  // Not unique: accounts are identified by email, and a unique index on an optional field makes
+  // MongoDB reject every second user that has no name (null collides with null).
+  name          String?
   displayName   String?   // The name shown on scorecards
   email         String?   @unique
   password      String?   // Hashed password
   geminiApiKey  String?   // User's custom Gemini API key
   image         String?
   scores        LeaderboardEntry[]
+  heroName      HeroName?
   createdAt     DateTime  @default(now())
+}
+
+// A hero name an account has claimed. Permanent: there is no rename path in the app.
+// Kept in its own collection (not as a unique optional field on User) because MongoDB treats a
+// missing field as null in a unique index, which would block every user that has not chosen yet.
+model HeroName {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  key       String   @unique // normalised form used for uniqueness, see src/server/hero-name.ts
+  name      String   // as the player typed it (case and spacing kept for display)
+  userId    String   @unique @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
 }
 
 model Player {

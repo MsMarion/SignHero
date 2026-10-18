@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { db } from "~/server/db";
 import { createTRPCRouter, publicProcedure } from "../trpc";
 import { z } from "zod";
+import { resolveScoreIdentity } from "~/server/score-identity";
 
 const createPlayerSchema = z.object({
   name: z.string().min(1).max(20),
@@ -34,11 +35,13 @@ type CommonMistake = {
 export const playerRouter = createTRPCRouter({
   create: publicProcedure
     .input(createPlayerSchema)
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      // Signed-in players always play under their claimed hero name; guests cannot take a claimed one.
+      const identity = await resolveScoreIdentity(ctx.session, input.name);
       try {
         const player = await db.player.create({
           data: {
-            name: input.name.toUpperCase(),
+            name: identity.name.toUpperCase(),
             score: input.score,
             avgReactionTime: input.avgReactionTime,
             mistakesMade: input.mistakesMade,

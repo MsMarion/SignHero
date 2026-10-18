@@ -10,7 +10,6 @@ export const userRouter = createTRPCRouter({
       z.object({
         email: z.string().email(),
         password: z.string().min(6),
-        heroName: z.string().min(2).max(20).optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -29,11 +28,10 @@ export const userRouter = createTRPCRouter({
       // Hash password
       const hashedPassword = await bcrypt.hash(input.password, 10);
 
-      // Create user
+      // Create user. The hero name is chosen (once, permanently) on the first sign-in, not here.
       const user = await db.user.create({
         data: {
           email: input.email,
-          displayName: input.heroName ?? input.email.split("@")[0],
           password: hashedPassword,
         },
       });
@@ -52,6 +50,7 @@ export const userRouter = createTRPCRouter({
         email: true,
         displayName: true,
         geminiApiKey: true,
+        heroName: { select: { name: true } },
       },
     });
 
@@ -59,6 +58,7 @@ export const userRouter = createTRPCRouter({
 
     return {
       ...user,
+      heroName: user.heroName?.name ?? null,
       // Security Sanitization: Mask sensitive API key when returning profile data over the wire
       geminiApiKey: user.geminiApiKey ? "••••••••••••" + user.geminiApiKey.slice(-4) : null,
     };
@@ -66,15 +66,13 @@ export const userRouter = createTRPCRouter({
 
   updateProfile: protectedProcedure
     .input(
+      // The hero name is permanent and is not editable here; see the heroName router.
       z.object({
-        heroName: z.string().min(2).max(20).optional(),
         geminiApiKey: z.string().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const updateData: { displayName?: string; geminiApiKey?: string } = {
-        displayName: input.heroName,
-      };
+      const updateData: { geminiApiKey?: string } = {};
 
       // Only update API key if a brand new unmasked key was provided
       if (input.geminiApiKey && !input.geminiApiKey.startsWith("••••••••••••")) {
