@@ -112,7 +112,7 @@ async function withChrome(fn) {
   const chrome = spawn(chromePath, [
     '--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`,
     '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream',
-    '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-first-run', '--no-sandbox', 'about:blank',
+    '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-first-run', '--no-sandbox', '--window-size=1280,900', 'about:blank',
   ], { stdio: 'ignore' });
   try {
     let target;
@@ -154,6 +154,16 @@ async function waitFor(predicate, timeoutMs, label) {
     await sleep(500);
   }
   throw new Error(`timed out waiting for ${label}`);
+}
+
+// What the page looked like, for failure messages: CI browsers are slow and "timed out" alone is not enough.
+async function pageDiag(evaluate, events) {
+  const text = String((await evaluate(`document.body.innerText.replace(/\s+/g, ' ').slice(0, 220)`)) ?? '');
+  const counters = String((await evaluate(`sessionStorage.getItem('__smoke') || '{}'`)) ?? '{}');
+  const errs = events
+    .filter((e) => e.method === 'Runtime.consoleAPICalled' && e.params.type === 'error')
+    .map((e) => e.params.args.map((a) => a.value ?? a.description ?? '').join(' ').slice(0, 120)).slice(-3);
+  return `page: "${text}" | counters: ${counters} | console errors: ${JSON.stringify(errs)}`;
 }
 
 // ---------------------------------------------------------------- checks
@@ -235,8 +245,19 @@ await check('browser game: camera goes live, frames flow, rounds do not reconnec
 
     await waitFor(() => evaluate(`!![...document.querySelectorAll('button')].find(b => /start challenge/i.test(b.textContent))`), 45000, 'the Start button');
     // The button is server-rendered before React hydrates, so an early click is lost: click until the game starts.
+    // The click is a real mouse event sent through Chrome's input API, like a person's click. A script's
+    // el.click() is not a user gesture, so Chrome's autoplay policy could then block the game's audio and the
+    // page would log an uncaught "play() failed" rejection that no real player sees.
+    const clickStart = async () => {
+      const where = await evaluate(`(() => { const b = [...document.querySelectorAll('button')].find(b => /start challenge/i.test(b.textContent)); if (!b) return ''; const r = b.getBoundingClientRect(); return JSON.stringify({ x: r.left + r.width / 2, y: r.top + r.height / 2 }); })()`);
+      if (!where) return;
+      const { x, y } = JSON.parse(where);
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+      await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+      await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+    };
     await waitFor(async () => {
-      await evaluate(`(() => { const b = [...document.querySelectorAll('button')].find(b => /start challenge/i.test(b.textContent)); if (b) b.click(); })()`);
+      await clickStart();
       await sleep(1000);
       return evaluate(`document.body.innerText.includes('TIMER')`);
     }, 45000, 'the game to start after clicking Start');
@@ -250,9 +271,12 @@ await check('browser game: camera goes live, frames flow, rounds do not reconnec
     }
 
     // Play several rounds with the keyboard fallback, which forces cooldown -> playing transitions.
+    // The first round can be slow to start: on a CI runner (software rendering) MediaPipe's load stretches the
+    // 3 s countdown to 20 s or more, so the first wait is long and later rounds are quick.
     let hits = 0;
     for (let round = 0; round < 4; round++) {
-      const letter = await waitFor(() => evaluate(`(document.body.innerText.match(/FIND\\s+([A-Z])/) || [])[1] || ''`), 15000, 'a target letter');
+      const letter = await waitFor(() => evaluate(`(document.body.innerText.match(/FIND\\s+([A-Z])/) || [])[1] || ''`), round === 0 ? 60000 : 20000, 'a target letter')
+        .catch(async (err) => { throw new Error(`${err.message} in round ${round + 1}. ${await pageDiag(evaluate, events)}`); });
       await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(letter.toLowerCase())} }))`);
       hits++;
       await sleep(1800); // 1 s cooldown + next target
@@ -260,18 +284,20 @@ await check('browser game: camera goes live, frames flow, rounds do not reconnec
     const readCounters = async () => JSON.parse((await evaluate("sessionStorage.getItem('__smoke') || '{}'")) || '{}');
     // A desktop sends a frame every few tens of ms; software rendering on a shared CI runner can be
     // far slower. Wait (briefly) for a few frames rather than expecting a rate.
-    await waitFor(async () => ((await readCounters()).sends || 0) >= 3, 25000, 'a few frames to be sent').catch(() => {});
+    await waitFor(async () => ((await readCounters()).sends || 0) >= 3, 40000, 'a few frames to be sent').catch(() => {});
     const s = { opens: 0, sends: 0, msgs: 0, ...(await readCounters()) };
     const consoleErrors = events
       .filter((e) => e.method === 'Runtime.consoleAPICalled' && e.params.type === 'error')
       .map((e) => e.params.args.map((a) => a.value ?? a.description ?? '').join(' ').slice(0, 160));
-    const exceptions = events.filter((e) => e.method === 'Runtime.exceptionThrown').length;
+    const exceptions = events
+      .filter((e) => e.method === 'Runtime.exceptionThrown')
+      .map((e) => String(e.params.exceptionDetails.exception?.description || e.params.exceptionDetails.text || 'unknown').split(/\r?\n/).slice(0, 3).join(' | ').slice(0, 260));
 
     assert(s.opens === 1, `opened ${s.opens} detection sockets over ${hits} rounds (expected 1; it reconnects every round)`);
     assert(s.sends >= 3, `only ${s.sends} frames sent to the backend`);
     assert(s.msgs >= 3 && s.msgs >= s.sends - 2, `only ${s.msgs} replies received (sent ${s.sends})`);
     assert(consoleErrors.length === 0, `console errors: ${consoleErrors.slice(0, 3).join(' | ')}`);
-    assert(exceptions === 0, `${exceptions} uncaught page exceptions`);
+    assert(exceptions.length === 0, `${exceptions.length} uncaught page exceptions: ${exceptions.join(' || ')}`);
     return `${hits} rounds, 1 socket, ${s.sends} frames sent, ${s.msgs} replies, 0 console errors`;
   });
 });
