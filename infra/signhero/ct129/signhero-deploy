@@ -36,6 +36,9 @@ EXPECT_DEVICE="${SIGNHERO_TEST_EXPECT_DEVICE:-cuda}"
 
 verb="${1:-}"
 arg="${2:-}"
+# What this run did, printed as the last line ("RESULT: ...") so the CI workflow knows whether anything
+# was released and therefore whether a rollback makes sense: released | skipped | noop | repaired | rolledback | failed
+RESULT=""
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 git_repo() { git -C "$REPO" "$@"; }
@@ -182,15 +185,16 @@ run_deploy() {
   if [ "$prev" != "$sha" ] && ! affects_host "$prev" "$sha"; then
     git_repo merge --ff-only --quiet "$sha" || return 1
     log "no changes affect the backend (docs, tests, CI or frontend only): clone fast-forwarded to ${sha:0:7}, nothing to rebuild or restart"
+    RESULT=skipped
     return 0
   fi
   if is_heavy "$prev" "$sha"; then heavy=yes; fi
   check_disk "$heavy" || return $?
 
   if [ "$prev" = "$sha" ]; then
-    if health_once; then log "already at ${sha:0:7} and healthy; nothing to do"; return 0; fi
+    if health_once; then log "already at ${sha:0:7} and healthy; nothing to do"; RESULT=noop; return 0; fi
     log "already at ${sha:0:7} but not healthy; recreating the container"
-    IMAGE_TAG="$prev_tag" compose up -d --no-build --force-recreate >/dev/null 2>&1 && health && return 0
+    if IMAGE_TAG="$prev_tag" compose up -d --no-build --force-recreate >/dev/null 2>&1 && health; then RESULT=repaired; return 0; fi
     echo "FAILED: still unhealthy. No code changed in this run, so there is nothing to roll back to." >&2
     return 1
   fi
@@ -200,6 +204,7 @@ run_deploy() {
 
   if deploy_chain "$sha" "$heavy" "$prev_tag"; then
     if [ "$heavy" = yes ]; then prune_images "${sha:0:12}" "$prev_tag"; fi
+    RESULT=released
     return 0
   fi
 
@@ -239,7 +244,7 @@ fi
 start=$SECONDS
 rc=0
 case "$verb" in
-  rollback) run_rollback || rc=$? ;;
+  rollback) run_rollback || rc=$?; [ "$rc" -eq 0 ] && RESULT=rolledback ;;
   deploy)   run_deploy "$arg" || rc=$? ;;
 esac
 show_status
@@ -248,4 +253,5 @@ if [ "$rc" -eq 0 ]; then
 else
   echo "FAILED: $verb in $((SECONDS - start))s (exit $rc, see the log above)" >&2
 fi
+if [ "$verb" = deploy ] || [ "$verb" = rollback ]; then echo "RESULT: ${RESULT:-failed}"; fi
 exit "$rc"
