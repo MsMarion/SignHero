@@ -119,6 +119,18 @@ After a no-op deploy the run ends red, the rollback job reports that nothing was
   restart the frontend and recreate the backend. (3) Check the smoke test is green, then leave `DETECTION_TOKEN_REQUIRED` unset: with a secret set,
   tickets are required. Set `DETECTION_TOKEN_REQUIRED=0` to go back to optional if anything misbehaves.
 
+## Observability and debugging
+- **Health.** `GET /api/health` (site: database) and `GET /api/health?deep=1` (also the GPU backend) return 200 or 503 with a JSON body naming the failed check, the
+  running commit (`version`) and uptime. The backend has `GET /healthz` (200 once the model is loaded) and `GET /metrics` (Prometheus text: sockets, capacity,
+  queue depth, frames received / throttled / without a hand / inferred, handshakes refused by reason, batch statistics).
+- **Logs.** The site logs one JSON object per line (`journalctl -u signhero-frontend -o cat | jq`): tRPC failures (`trpc failure` error, `trpc refused` warning),
+  slow calls over 1.5 s, failed health checks, and `client_error` lines for errors in players' browsers (uncaught errors, unhandled rejections, page crashes; reported by
+  the page to `POST /api/client-error`, rate limited and size capped). `LOG_LEVEL=debug` adds one line per tRPC call. The backend logs JSON too (`docker logs`).
+- **Debug panel.** Open any page with `?debug=1` (or press Ctrl+Shift+D) for an overlay with the build, signed-in user, detection connection state, ticket,
+  sockets opened, reconnect attempt, frames sent/replied, latency and reported errors. `?debug=0` turns it off. It only shows what the page knows; nothing is sent.
+- **Monitor.** The "Production monitor" workflow runs every 15 minutes against the public site (deep health plus a WebSocket round trip) and fails, which emails the
+  repository watchers, when something is down.
+
 ## Repository settings
 `main` is protected: a pull request is required, the three CI checks (`web (types and build)`, `account tests (MongoDB)`,
 `backend and compose (static checks)`) must pass, no force-pushes or deletions, enforced for admins. Workflows from outside

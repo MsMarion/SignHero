@@ -1,5 +1,6 @@
-import { WhackAMoleCanvas } from "~/components/game/WhackAMoleCanvas";
+import { redirect } from "next/navigation";
 
-export default function TrainingPage() {
-  return <WhackAMoleCanvas />;
+// This used to be a second copy of the Whack-A-Sign page without the full-screen layout. One game, one URL.
+export default function TrainingIndexPage() {
+  redirect("/whack");
 }

@@ -7,6 +7,7 @@ import {
   rateLimit,
 } from "../trpc";
 import { devmodeEnabled } from "~/server/devmode-guard";
+import { isObjectId } from "~/server/ids";
 
 import { z } from "zod";
 import { songMediaUrl } from "~/lib/s3";
@@ -96,6 +97,9 @@ export const songRouter = createTRPCRouter({
   getById: publicProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ input }) => {
+      if (!isObjectId(input.id)) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Song not found" });
+      }
       try {
         const song = await db.song.findUnique({
           where: { id: input.id },

@@ -4,6 +4,7 @@ import { type NextRequest } from "next/server";
 import { env } from "~/env";
 import { appRouter } from "~/server/api/root";
 import { createTRPCContext } from "~/server/api/trpc";
+import { log } from "~/server/log";
 
 /**
  * This wraps the `createTRPCContext` helper and provides the required context for the tRPC API when
@@ -21,14 +22,14 @@ const handler = (req: NextRequest) =>
     req,
     router: appRouter,
     createContext: () => createContext(req),
-    onError:
-      env.NODE_ENV === "development"
-        ? ({ path, error }) => {
-            console.error(
-              `❌ tRPC failed on ${path ?? "<no-path>"}: ${error.message}`
-            );
-          }
-        : undefined,
+    // Server faults are errors; refusals the caller caused (bad input, not signed in, rate limited, ...) are
+    // warnings, and plain "not found" is just information.
+    onError: ({ path, error }) => {
+      const fields = { path: path ?? "<no-path>", code: error.code, message: error.message };
+      if (error.code === "INTERNAL_SERVER_ERROR") log.error("trpc failure", { ...fields, cause: error.cause });
+      else if (error.code === "NOT_FOUND") log.info("trpc not found", fields);
+      else log.warn("trpc refused", fields);
+    },
   });
 
 export { handler as GET, handler as POST };

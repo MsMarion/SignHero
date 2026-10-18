@@ -260,11 +260,12 @@ export function WhackAMoleCanvas({ onStateChange }: WhackAMoleCanvasProps = {}) 
 
                     <button
                         onClick={handleStartChallenge}
+                        disabled={isCreating}
                         className="relative glass-button px-16 py-6 rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(45,226,230,0.4)] transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer border-2 border-cyan-400/60 group pointer-events-auto"
                     >
                         <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/30 via-fuchsia-500/30 to-purple-500/30 group-hover:opacity-100 opacity-60 transition-opacity pointer-events-none" />
                         <span className="relative z-10 text-white font-black tracking-[8px] text-2xl uppercase drop-shadow-[0_0_15px_rgba(255,255,255,0.8)] pointer-events-none">
-                            START CHALLENGE
+                            {isCreating ? "STARTING..." : "START CHALLENGE"}
                         </span>
                     </button>
                     

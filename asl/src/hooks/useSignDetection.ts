@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type SignPrediction } from "~/lib/gameScoring";
 import { reconnectDelayMs, STALL_MS } from "~/lib/reconnect";
+import { debugInc, debugSet } from "~/lib/debug";
 
 export interface UseSignDetectionReturn {
   predictions: SignPrediction[];
@@ -102,6 +103,8 @@ export function useSignDetection(
       console.log(attempt === 0 ? `Connecting WebSocket to: ${wsUrl}` : `Reconnecting WebSocket to: ${wsUrl}`);
 
       const url = ticket ? `${wsUrl}${wsUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(ticket)}` : wsUrl;
+      debugSet({ ws: "connecting", attempt, ticket: Boolean(ticket) });
+      debugInc("opens");
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
@@ -115,11 +118,13 @@ export function useSignDetection(
         isSendingRef.current = false;
         lastSendAtRef.current = 0;
         setIsConnected(true);
+        debugSet({ ws: "connected", attempt: 0 });
       };
 
       ws.onclose = () => {
         if (disposed || wsRef.current !== ws) return;
         console.log("WebSocket disconnected");
+        debugSet({ ws: "disconnected" });
         wsRef.current = null;
         isSendingRef.current = false;
         setIsConnected(false);
@@ -151,6 +156,8 @@ export function useSignDetection(
 
             const now = performance.now() / 1000;
             setLatency((now - prediction.clientTimestamp) * 1000);
+            debugInc("msgs");
+            debugSet({ latencyMs: (now - prediction.clientTimestamp) * 1000, hand: Boolean(prediction.handDetected) });
             addPrediction(prediction);
           }
         } catch (e) {
@@ -222,6 +229,7 @@ export function useSignDetection(
           if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && !isSendingRef.current) {
             isSendingRef.current = true;
             lastSendAtRef.current = Date.now();
+            debugInc("sends");
             const clientTimestamp = performance.now() / 1000;
             const payload = {
               clientTimestamp,

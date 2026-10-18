@@ -4,6 +4,7 @@ import { createTRPCRouter, publicProcedure, rateLimit } from "../trpc";
 import { z } from "zod";
 import { resolveScoreIdentity } from "~/server/score-identity";
 import { getClientKey } from "~/server/rate-limit";
+import { isObjectId } from "~/server/ids";
 import { ownsPlayer, validateFinalStats } from "~/server/score-validation";
 
 const createPlayerSchema = z.object({
@@ -132,6 +133,9 @@ export const playerRouter = createTRPCRouter({
   getById: publicProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ input }) => {
+      if (!isObjectId(input.id)) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Player not found" });
+      }
       try {
         const player = await db.player.findUnique({
           where: { id: input.id },
