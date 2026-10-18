@@ -109,6 +109,12 @@ prune_images() {
 
 is_heavy() { [ -n "$(git_repo diff --name-only "$1" "$2" -- backend/Dockerfile backend/requirements.txt | head -1)" ]; }
 
+# True when the commits between the two touch something this host actually runs (the backend code and
+# its image definition). Docs, tests, CI and the frontend do not.
+affects_host() {
+  [ -n "$(git_repo diff --name-only "$1" "$2" -- api_server_http.py 'Base test/Sign-Language-Recognition' backend/Dockerfile backend/requirements.txt | head -1)" ]
+}
+
 # heavy=yes builds a new image; heavy=no just recreates the container on the current image, which
 # runs the code from the (already fast-forwarded) clone.
 deploy_chain() {
@@ -173,6 +179,11 @@ run_deploy() {
   local sha="$1" prev prev_tag heavy=no
   prev=$(cur_sha); prev_tag=$(cur_tag)
   preflight_deploy "$sha" || return $?
+  if [ "$prev" != "$sha" ] && ! affects_host "$prev" "$sha"; then
+    git_repo merge --ff-only --quiet "$sha" || return 1
+    log "no changes affect the backend (docs, tests, CI or frontend only): clone fast-forwarded to ${sha:0:7}, nothing to rebuild or restart"
+    return 0
+  fi
   if is_heavy "$prev" "$sha"; then heavy=yes; fi
   check_disk "$heavy" || return $?
 

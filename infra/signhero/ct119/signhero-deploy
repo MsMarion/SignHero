@@ -161,6 +161,10 @@ preflight_deploy() {
   fi
 }
 
+# True when the commits between the two touch something this host actually runs (the app and the
+# database/storage compose file). Docs, tests, CI and the other host's files do not.
+affects_host() { [ -n "$(git_repo diff --name-only "$1" "$2" -- asl docker-compose.yml | head -1)" ]; }
+
 run_deploy() {
   local sha="$1" prev prev_dist
   preflight_deploy "$sha" || return $?
@@ -172,6 +176,12 @@ run_deploy() {
     restart_service && health && return 0
     echo "FAILED: still unhealthy. No code changed in this run, so there is nothing to roll back to." >&2
     return 1
+  fi
+
+  if ! affects_host "$prev" "$sha"; then
+    git_repo merge --ff-only --quiet "$sha" || return 1
+    log "no changes affect the frontend (docs, tests, CI or backend only): repo fast-forwarded to ${sha:0:7}, nothing to build or restart"
+    return 0
   fi
 
   # Remember what to return to BEFORE anything changes, so the rollback verb works after any failure.
