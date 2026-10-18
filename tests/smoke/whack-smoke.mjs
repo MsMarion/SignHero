@@ -58,9 +58,21 @@ function landmarks() {
   return Array.from({ length: 21 }, () => ({ x: 0.2 + Math.random() * 0.6, y: 0.2 + Math.random() * 0.6, z: 0 }));
 }
 
+// The detection server wants a short-lived ticket from the site; fetch one the way the page does.
+// Without a configured secret the site answers { token: null } and the plain URL is used.
+async function fetchTicket() {
+  const res = await fetch(`${BASE}/api/detection-token`, { cache: "no-store" });
+  assert(res.ok, `/api/detection-token answered ${res.status}`);
+  return (await res.json()).token ?? null;
+}
+async function ticketUrl() {
+  const t = await fetchTicket();
+  return t ? `${WS_URL}?token=${encodeURIComponent(t)}` : WS_URL;
+}
+
 // Opens the detection WebSocket and returns helpers; resolves after the server's "ready" message.
-async function openSocket() {
-  const ws = new WebSocket(WS_URL);
+async function openSocket(url) {
+  const ws = new WebSocket(url ?? await ticketUrl());
   const queue = [];
   let waiter = null;
   ws.addEventListener('message', (e) => {
@@ -181,6 +193,21 @@ await check('backend is up and uses the GPU', async () => {
   const j = await r.json();
   assert(ALLOW_CPU || j.device === 'cuda', `device is "${j.device}", expected cuda (set SMOKE_ALLOW_CPU=1 to allow)`);
   return `device ${j.device}`;
+});
+
+await check('a forged or garbled ticket is refused by the detection server', async () => {
+  for (const bad of ['garbage', '9999999999.0123456789abcdef.' + '0'.repeat(64)]) {
+    const ws = new WebSocket(`${WS_URL}?token=${bad}`);
+    const outcome = await new Promise((resolve) => {
+      ws.addEventListener('message', () => resolve('accepted'), { once: true });
+      ws.addEventListener('error', () => resolve('refused'), { once: true });
+      ws.addEventListener('close', () => resolve('refused'), { once: true });
+      setTimeout(() => resolve('timeout'), 8000);
+    });
+    try { ws.close(); } catch { /* already closed */ }
+    assert(outcome === 'refused', `a bad ticket was not refused (${outcome})`);
+  }
+  return 'refused';
 });
 
 await check('websocket round trip is fast enough', async () => {

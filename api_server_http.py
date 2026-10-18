@@ -25,6 +25,7 @@ sys.path.insert(0, BASE_DIR)
 
 from utils import load_model, LabelMapper
 from app.frame_utils import extract_hand_features_mask, draw_hand_features
+import ws_auth
 
 # ─── Structured JSON Logging ───────────────────────────────────────────────────
 class JSONFormatter(logging.Formatter):
@@ -70,10 +71,23 @@ app = FastAPI(
     lifespan=lifespan_handler
 )
 
+# Access control for the detection WebSocket (see ws_auth.py). Tickets are signed by the website with the shared
+# DETECTION_TOKEN_SECRET. DETECTION_TOKEN_REQUIRED=0 lets sockets without a ticket in (used while rolling out);
+# when a secret is set and the flag is not given, tickets are required.
+_secret = os.environ.get("DETECTION_TOKEN_SECRET", "")
+_required_default = "1" if _secret else "0"
+WS_AUTH = ws_auth.AuthConfig(
+    secret=_secret,
+    required=(os.environ.get("DETECTION_TOKEN_REQUIRED") or _required_default) == "1",
+    origins=ws_auth.parse_origins(os.environ.get("ALLOWED_ORIGINS")),
+)
+MAX_WS_PER_ADDRESS = int(os.environ.get("MAX_WS_PER_ADDRESS", "10"))
+ws_limiter = ws_auth.ConnectionLimiter(MAX_WS_PER_ADDRESS)
+
 # CORS - Secure configuration for allowed origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:4000", "http://127.0.0.1:3000", "http://127.0.0.1:4000"],
+    allow_origins=sorted(WS_AUTH.origins),
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
@@ -290,15 +304,33 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.warning(f"Rejected WebSocket connection: {active_ws_connections}/{MAX_WS_CONNECTIONS} slots full")
         return
     
-    await websocket.accept()
+    # Who may connect: our own pages (Origin) holding a fresh signed ticket. Refused before the handshake completes.
+    address = ws_auth.client_address(websocket.headers, websocket.client.host if websocket.client else "unknown")
+    allowed, reason = ws_auth.check_handshake(
+        WS_AUTH, websocket.headers.get("origin"), websocket.query_params.get("token")
+    )
+    if not allowed:
+        logger.warning(f"Rejected WebSocket from {address}: {reason}")
+        await websocket.close(code=1008)
+        return
+    if not ws_limiter.acquire(address):
+        logger.warning(f"Rejected WebSocket from {address}: too many connections from this address")
+        await websocket.close(code=1013)
+        return
+
+    try:
+        await websocket.accept()
+    except BaseException:
+        ws_limiter.release(address)
+        raise
     active_ws_connections += 1
     logger.info(f"WebSocket connected ({active_ws_connections}/{MAX_WS_CONNECTIONS} active)")
-    await websocket.send_json({"type": "ready", "message": "Connected to RTX 5090 Micro-Batcher"})
-    
+
     last_frame_time = 0
     last_reply = None
 
     try:
+        await websocket.send_json({"type": "ready", "message": "Connected to RTX 5090 Micro-Batcher"})
         while True:
             data = await websocket.receive_json()
 
@@ -354,59 +386,13 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
     finally:
+        ws_limiter.release(address)
         active_ws_connections -= 1
         logger.info(f"WebSocket disconnected ({active_ws_connections}/{MAX_WS_CONNECTIONS} active)")
 
-# Fallback HTTP POST endpoint for legacy clients or test scripts
-@app.post("/predict_frame")
-async def predict_frame(file: UploadFile = File(...), client_timestamp: float = 0.0):
-    contents = await file.read()
-    nparr = np.frombuffer(contents, np.uint8)
-    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    
-    if frame is None:
-        return SignPrediction(
-            letter="None", confidence=0.0, timestamp=time.time(), clientTimestamp=client_timestamp, handDetected=False
-        )
-
-    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = resources.hands.process(frame_rgb)
-    
-    detected_letter = "None"
-    confidence = 0.0
-    hand_detected = False
-    
-    if results.multi_hand_landmarks:
-        hand_detected = True
-        hand_landmarks = results.multi_hand_landmarks[0]
-        
-        orig_features_mask = np.zeros_like(frame)
-        extract_hand_features_mask(orig_features_mask, hand_landmarks)
-        mirror_features_mask = cv2.flip(orig_features_mask, 1)
-        
-        orig_input = resources.transform(orig_features_mask).unsqueeze(0).to(resources.device)
-        mirror_input = resources.transform(mirror_features_mask).unsqueeze(0).to(resources.device)
-        
-        with torch.no_grad():
-            orig_output = resources.model(orig_input)
-            mirror_output = resources.model(mirror_input)
-            
-            final_output = torch.max(orig_output, mirror_output)
-            probs = torch.nn.functional.softmax(final_output, dim=1)
-            conf_tensor, predicted_class = torch.max(probs, 1)
-            
-            current_conf = conf_tensor.item()
-            if current_conf > resources.confidence_threshold:
-                detected_letter = LabelMapper.index_to_label(predicted_class.item())
-                confidence = current_conf
-            else:
-                detected_letter = "None"
-                confidence = current_conf
-
-    return SignPrediction(
-        letter=detected_letter, confidence=confidence, timestamp=time.time(), clientTimestamp=client_timestamp, handDetected=hand_detected
-    )
+# The old HTTP POST /predict_frame fallback was removed: nothing used it, and it let anyone run the model.
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=4001)
+    # Frames are ~2 KB of JSON; refuse anything much bigger instead of buffering up to the 16 MB default.
+    uvicorn.run(app, host="0.0.0.0", port=4001, ws_max_size=65536)

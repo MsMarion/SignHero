@@ -7,7 +7,7 @@ services:
     container_name: signhero-mongodb
     command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
     ports:
-      - "4002:27017"
+      - "127.0.0.1:4002:27017"
     volumes:
       - ./mongodb_data:/data/db
     environment:
@@ -23,8 +23,8 @@ services:
     image: minio/minio:latest
     container_name: signhero-minio
     ports:
-      - "4003:9000" # API Port
-      - "4004:9001" # Dashboard Port
+      - "127.0.0.1:4003:9000" # API Port
+      - "127.0.0.1:4004:9001" # Dashboard Port
     volumes:
       - ./minio_data:/data
     environment:

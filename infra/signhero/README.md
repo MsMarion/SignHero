@@ -105,6 +105,20 @@ After a no-op deploy the run ends red, the rollback job reports that nothing was
 - The Mongo dumps are on CT119's own disk (newest 10 kept), so they do not survive losing that disk.
 - The verb scripts and the CT129 host compose are installed by hand; changing them needs a manual copy to each host.
 
+## Access control for the detection server and storage
+- **Ports.** Mongo (4002) and MinIO (4003/4004) are published on 127.0.0.1 only. Song images and audio reach browsers through the site at
+  `/api/media/<key>`. CT119 applies the compose change by itself: the frontend unit runs `docker compose up -d` before it starts, so the first
+  deploy after this change recreates the two containers (a few seconds of database downtime during that restart). MinIO still has the default
+  `admin/password` login; it is only reachable from CT119 itself now, but change it when songs are seeded.
+- **Detection tickets.** The page fetches a 60-second signed ticket from `/api/detection-token` and connects with `?token=`. The detection
+  server also refuses browsers whose Origin is not ours, closes sockets whose frames are larger than 64 KB, and allows 10 sockets per client address.
+  Both sides read the same secret, `DETECTION_TOKEN_SECRET`: in `/opt/signhero/asl/.env` on CT119 and in `/opt/signhero-api-prod/.env` on CT129
+  (the host compose passes it through). Generate one with `openssl rand -hex 32` and type it in yourself; never commit or paste it.
+- **Rollout order.** (1) Merge: with no secret on CT129 the server runs in optional mode (origin check on, tickets accepted but not required).
+  (2) Set the secret on both hosts, install the updated `ct129/signhero-deploy` (its health check builds a ticket from the secret in the container),
+  restart the frontend and recreate the backend. (3) Check the smoke test is green, then leave `DETECTION_TOKEN_REQUIRED` unset: with a secret set,
+  tickets are required. Set `DETECTION_TOKEN_REQUIRED=0` to go back to optional if anything misbehaves.
+
 ## Repository settings
 `main` is protected: a pull request is required, the three CI checks (`web (types and build)`, `account tests (MongoDB)`,
 `backend and compose (static checks)`) must pass, no force-pushes or deletions, enforced for admins. Workflows from outside

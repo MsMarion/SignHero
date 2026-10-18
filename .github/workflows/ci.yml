@@ -96,6 +96,8 @@ jobs:
             "Base test/Sign-Language-Recognition/app" \
             "Base test/Sign-Language-Recognition/model" \
             "Base test/Sign-Language-Recognition/utils"
+      - name: Detection access-control tests (no GPU)
+        run: python -m unittest discover -s tests/backend -v
       - name: Resolve the pinned requirements (no install)
         run: python -m pip install --dry-run -r backend/requirements.txt
       - name: Validate the compose files

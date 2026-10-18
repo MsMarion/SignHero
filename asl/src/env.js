@@ -47,6 +47,8 @@ export const env = createEnv({
     // http://localhost:4000/api/auth/callback/google
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
+    // Shared with the detection server (DETECTION_TOKEN_SECRET there): signs the tickets browsers present.
+    DETECTION_TOKEN_SECRET: z.string().min(16).optional(),
   },
 
   /**
@@ -84,6 +86,7 @@ export const env = createEnv({
     NEXTAUTH_URL: process.env.NEXTAUTH_URL,
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    DETECTION_TOKEN_SECRET: process.env.DETECTION_TOKEN_SECRET,
     NEXT_PUBLIC_GOOGLE_API_KEY: process.env.NEXT_PUBLIC_GOOGLE_API_KEY,
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL,
