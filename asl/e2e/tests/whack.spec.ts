@@ -9,7 +9,8 @@ test.describe("Whack-A-Sign: lobby and start", () => {
     await expect(page.getByRole("heading", { name: "WHACK-A-SIGN" })).toBeVisible();
     await expect(page.getByText("Reflex Lab")).toBeVisible();
     await expect(page.getByText("SHOW THE SIGN TO THE CAMERA OR CLICK TILES TO SCORE")).toBeVisible();
-    await expect(page.getByTestId("whack-start")).toHaveText("START CHALLENGE");
+    // START says "STARTING CAMERA..." until the camera and hand tracking are ready (a few seconds, longer on a cold start).
+    await expect(page.getByTestId("whack-start")).toHaveText("START CHALLENGE", { timeout: 60_000 * SLOW });
   });
 
   test("[W-02] starting counts down 3-2-1, then the timer runs from 0:30 and a target letter is shown", async ({ page }) => {
@@ -52,6 +53,17 @@ test.describe("Whack-A-Sign: lobby and start", () => {
     await d.accept();
     await expect(page.getByTestId("whack-start")).toBeVisible();
     await expect(page.getByTestId("whack-start")).toHaveText("START CHALLENGE");
+  });
+});
+
+test.describe("Whack-A-Sign: camera readiness", () => {
+  test("[W-22] if hand tracking cannot load the player is not stuck: START opens up and the game can be played", async ({ page }) => {
+    test.skip(Boolean(process.env.CI), "CI builds replace hand tracking with simulated frames, so there is nothing to block");
+    await page.route("**/mediapipe/hands/**", (route) => route.abort());
+    await openWhack(page);
+    await expect(page.getByTestId("whack-start")).toHaveText("START CHALLENGE", { timeout: 40_000 });
+    await page.getByTestId("whack-start").click();
+    await waitForPlaying(page);
   });
 });
 

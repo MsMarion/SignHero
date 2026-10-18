@@ -81,6 +81,8 @@ model Player {
   userId              String?         @db.ObjectId
   ipKey               String?
   finalizedAt         DateTime?
+  // A game that used tap-to-score on a phone: kept for the player's report, never put on the leaderboard.
+  practice            Boolean?
 }
 
 type Interaction {

@@ -42,7 +42,8 @@ export function usePlayerManager() {
 
   const submitFinalStats = useCallback((
     score: number,
-    metrics: GameMetrics
+    metrics: GameMetrics,
+    options?: { practice?: boolean },
   ) => {
     if (!playerId || hasFinishedRef.current) return;
     
@@ -60,6 +61,7 @@ export function usePlayerManager() {
       avgReactionTime: avgReaction,
       mistakesMade: metrics.totalMisses,
       correctHits: metrics.totalCorrect,
+      practice: options?.practice ?? false,
     }, {
       onSuccess: () => {
         console.log("✅ Stats saved, redirecting...");

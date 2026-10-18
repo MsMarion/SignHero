@@ -17,6 +17,7 @@ const updateFinalStatsSchema = z.object({
   avgReactionTime: z.number().min(0),
   mistakesMade: z.number().int().min(0),
   correctHits: z.number().int().min(0),
+  practice: z.boolean().optional(),
 });
 
 /** Never send the owner id or address fields to browsers. */
@@ -103,6 +104,7 @@ export const playerRouter = createTRPCRouter({
           },
           data: {
             ...stats,
+            practice: input.practice === true,
             finalizedAt: new Date(),
           },
         });
@@ -110,14 +112,17 @@ export const playerRouter = createTRPCRouter({
           throw new TRPCError({ code: "CONFLICT", message: "This game has already been submitted" });
         }
 
-        await db.leaderboardEntry.create({
-          data: {
-            name: player.name,
-            score: stats.score,
-            playerId: player.id,
-            userId: player.userId,
-          },
-        });
+        // Tap-to-score games (phones) are practice: the player keeps the report, but only camera games are ranked.
+        if (input.practice !== true) {
+          await db.leaderboardEntry.create({
+            data: {
+              name: player.name,
+              score: stats.score,
+              playerId: player.id,
+              userId: player.userId,
+            },
+          });
+        }
 
         return publicPlayer(await db.player.findUniqueOrThrow({ where: { id: player.id } }));
       } catch (error) {

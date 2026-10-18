@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { isPhoneWidth } from "~/hooks/useIsPhone";
 
 /**
  * A container that guarantees a safe viewing area of at least 1920x1080,
@@ -12,9 +13,11 @@ export function ScaledContainer({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     function handleResize() {
-      // The "Safe Zone" we must guarantee is entirely visible
-      const targetWidth = 1920;
-      const targetHeight = 1080;
+      // The "Safe Zone" we must guarantee is entirely visible. A phone gets a narrow zone (480 px wide, any height)
+      // instead of the 1920 x 1080 desktop stage, which would shrink every page to a fifth of its size.
+      const phone = isPhoneWidth(window.innerWidth);
+      const targetWidth = phone ? 480 : 1920;
+      const targetHeight = phone ? 1 : 1080;
 
       // Available screen real estate
       const windowWidth = window.innerWidth;

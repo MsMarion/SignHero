@@ -12,6 +12,10 @@ export interface UseSignDetectionReturn {
   handDetected: boolean;
   latency: number;
   injectPrediction: (p: SignPrediction) => void;
+  /** Hand tracking is loaded and can start reading frames (or has been replaced by simulated frames in a test build). */
+  trackingReady: boolean;
+  /** Hand tracking could not be loaded at all; the player can still be let in (tap play) rather than blocked. */
+  trackingFailed: boolean;
 }
 
 const MAX_PREDICTIONS = 30; // Ring buffer size
@@ -24,12 +28,17 @@ export function useSignDetection(
   videoRef: React.RefObject<HTMLVideoElement | null>,
   isWebcamReady: boolean,
   enabled = true,
+  /** Load hand tracking before `enabled` (e.g. in the lobby), so the game does not start with it still warming up. */
+  prepare = false,
 ): UseSignDetectionReturn {
   const [predictions, setPredictions] = useState<SignPrediction[]>([]);
   const predictionsSyncRef = useRef<SignPrediction[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [handDetected, setHandDetected] = useState(false);
   const [latency, setLatency] = useState(0);
+  const [trackingReady, setTrackingReady] = useState(false);
+  const [trackingFailed, setTrackingFailed] = useState(false);
+  const initStartedRef = useRef(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const handsRef = useRef<any | null>(null);
@@ -199,30 +208,21 @@ export function useSignDetection(
     };
   }, [enabled, addPrediction]);
 
-  // Initialize MediaPipe Hands in browser
+  // Load MediaPipe Hands in the browser. This happens once, as soon as the camera is ready and the page wants tracking
+  // (the lobby asks for it early with `prepare`), so a phone does not spend the first seconds of a game compiling it.
   useEffect(() => {
-    if (typeof window === "undefined" || !enabled || !isWebcamReady || !videoRef.current) return;
-
-    let mounted = true;
-    let lastSendTime = 0;
-    let simulatedFrames: ReturnType<typeof setInterval> | null = null;
+    if (typeof window === "undefined" || !(enabled || prepare) || !isWebcamReady || !videoRef.current) return;
+    if (initStartedRef.current) return;
+    initStartedRef.current = true;
 
     async function initMediaPipe() {
+      // Test builds only (NEXT_PUBLIC_SIMULATED_FRAMES=1, set by e2e/build.mjs on CI): hand tracking is WebGL in
+      // software on a two-core CI runner, which starves the page for a minute. Frames are simulated below instead.
+      if (process.env.NEXT_PUBLIC_SIMULATED_FRAMES === "1") {
+        setTrackingReady(true);
+        return;
+      }
       try {
-        // Test builds only (NEXT_PUBLIC_SIMULATED_FRAMES=1, set by e2e/build.mjs on CI): hand tracking is WebGL in
-        // software on a two-core CI runner, which starves the page for a minute. Send "no hand" frames over the same
-        // protocol instead, so everything downstream of the camera is still exercised. Never set in production.
-        if (process.env.NEXT_PUBLIC_SIMULATED_FRAMES === "1") {
-          simulatedFrames = setInterval(() => {
-            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && !isSendingRef.current) {
-              isSendingRef.current = true;
-              lastSendAtRef.current = Date.now();
-              debugInc("sends");
-              wsRef.current.send(JSON.stringify({ clientTimestamp: performance.now() / 1000, handDetected: false, landmarks: [] }));
-            }
-          }, 50);
-          return;
-        }
         const { Hands } = await import("@mediapipe/hands");
         const hands = new Hands({
           // Served by this site (scripts/copy-mediapipe.mjs), not a third-party CDN.
@@ -237,7 +237,7 @@ export function useSignDetection(
         });
 
         hands.onResults((results: any) => {
-          if (!mounted) return;
+          if (!handsRef.current) return;
 
           const hasHand = Boolean(results.multiHandLandmarks && results.multiHandLandmarks.length > 0);
 
@@ -255,46 +255,76 @@ export function useSignDetection(
           }
         });
 
+        const started = performance.now();
+        await hands.initialize(); // downloads and compiles the wasm and the model
+        debugSet({ trackingMs: Math.round(performance.now() - started) });
         handsRef.current = hands;
-
-        const video = videoRef.current;
-        if (!video) return;
-
-        const detectFrame = async (now: number) => {
-          if (!mounted || !handsRef.current || !video) return;
-
-          if (now - lastSendTime >= 33) { // ~30 fps throttling
-            lastSendTime = now;
-            if (video.readyState >= 2 && !isSendingRef.current) {
-              try {
-                await handsRef.current.send({ image: video });
-              } catch (err) {
-                // Ignore transient frame send errors during page navigation
-              }
-            }
-          }
-          animFrameRef.current = requestAnimationFrame(detectFrame);
-        };
-
-        animFrameRef.current = requestAnimationFrame(detectFrame);
-
-       } catch (err) {
+        setTrackingReady(true);
+      } catch (err) {
         console.error("Failed to load MediaPipe Hands:", err);
+        setTrackingFailed(true);
       }
     }
 
     void initMediaPipe();
+  }, [enabled, prepare, isWebcamReady, videoRef]);
 
-    return () => {
-      mounted = false;
-      if (simulatedFrames) clearInterval(simulatedFrames);
-      cancelAnimationFrame(animFrameRef.current);
-      if (handsRef.current && typeof handsRef.current.close === "function") {
-        try { handsRef.current.close(); } catch (e) {}
+  // Read camera frames only while the game wants detection.
+  useEffect(() => {
+    if (!enabled || !trackingReady) return;
+
+    // Simulated frames (see above): "no hand" frames over the same protocol, so everything after the camera is exercised.
+    if (process.env.NEXT_PUBLIC_SIMULATED_FRAMES === "1") {
+      const timer = setInterval(() => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && !isSendingRef.current) {
+          isSendingRef.current = true;
+          lastSendAtRef.current = Date.now();
+          debugInc("sends");
+          wsRef.current.send(JSON.stringify({ clientTimestamp: performance.now() / 1000, handDetected: false, landmarks: [] }));
+        }
+      }, 50);
+      return () => clearInterval(timer);
+    }
+
+    const video = videoRef.current;
+    if (!video) return;
+    let running = true;
+    let lastSendTime = 0;
+
+    const detectFrame = async (now: number) => {
+      if (!running || !handsRef.current) return;
+
+      if (now - lastSendTime >= 33) { // ~30 fps throttling
+        lastSendTime = now;
+        if (video.readyState >= 2 && !isSendingRef.current) {
+          try {
+            await handsRef.current.send({ image: video });
+          } catch (err) {
+            // Ignore transient frame send errors during page navigation
+          }
+        }
       }
-      handsRef.current = null;
+      animFrameRef.current = requestAnimationFrame(detectFrame);
     };
-  }, [enabled, isWebcamReady, videoRef]);
+
+    animFrameRef.current = requestAnimationFrame(detectFrame);
+    return () => {
+      running = false;
+      cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [enabled, trackingReady, videoRef]);
+
+  // Release hand tracking when the page using it goes away.
+  useEffect(() => {
+    return () => {
+      const hands = handsRef.current;
+      handsRef.current = null;
+      initStartedRef.current = false;
+      if (hands && typeof hands.close === "function") {
+        try { hands.close(); } catch (e) {}
+      }
+    };
+  }, []);
 
   // Global Keyboard Fallback Listener
   useEffect(() => {
@@ -332,6 +362,8 @@ export function useSignDetection(
     handDetected,
     latency,
     injectPrediction,
+    trackingReady,
+    trackingFailed,
   };
 }
 
