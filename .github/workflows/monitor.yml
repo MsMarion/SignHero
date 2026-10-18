@@ -1,0 +1,52 @@
+name: Production monitor
+
+# Every 15 minutes: is the public site up, is the database answering, is the GPU backend up and on the GPU, and does a
+# detection frame make it all the way through? A failure makes this run red, and GitHub emails the repository watchers.
+# Runs on a GitHub-hosted runner against the public URLs only; it needs no secrets and touches no data.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: production-monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: site, database, GPU backend, detection round trip
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - name: Health (site + database + GPU backend)
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            code=$(curl -sS -m 20 -o health.json -w '%{http_code}' 'https://asl.dawnbalaschak.com/api/health?deep=1' || echo 000)
+            if [ "$code" = "200" ]; then break; fi
+            echo "attempt $attempt: HTTP $code"; cat health.json 2>/dev/null || true; sleep 20
+          done
+          cat health.json; echo
+          [ "$code" = "200" ] || { echo "::error::deep health check failed (HTTP $code)"; exit 1; }
+          {
+            echo '### Production health'
+            echo '```json'
+            cat health.json
+            echo
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Detection server counters
+        run: curl -sS -m 20 https://aslapi.dawnbalaschak.com/metrics | grep -E '^signhero_(ws_active|queue_depth|ws_rejected_total|frames_total|model_in_vram)' | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: A frame goes through the detection server (no browser)
+        env:
+          SMOKE_BASE_URL: https://asl.dawnbalaschak.com
+          SMOKE_API_URL: https://aslapi.dawnbalaschak.com
+          SMOKE_BROWSER: "0"
+        run: node tests/smoke/whack-smoke.mjs

@@ -151,21 +151,21 @@ export function WhackAMoleCanvas({ onStateChange }: WhackAMoleCanvasProps = {}) 
                     <div className="absolute top-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-8 glass-panel px-8 py-3.5 rounded-3xl border border-green-500/40 shadow-[0_0_40px_rgba(34,197,94,0.3)] backdrop-blur-xl pointer-events-auto">
                         <div className="flex items-center gap-3">
                             <span className="text-xs font-mono text-white/50 tracking-widest uppercase">TIMER</span>
-                            <span className={`text-4xl font-black font-mono tabular-nums tracking-wider ${timeLeft <= 10 ? "text-red-500 animate-pulse drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]" : "text-white"}`}>
+                            <span data-testid="whack-timer" className={`text-4xl font-black font-mono tabular-nums tracking-wider ${timeLeft <= 10 ? "text-red-500 animate-pulse drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]" : "text-white"}`}>
                                 {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}
                             </span>
                         </div>
                         <div className="h-8 w-px bg-white/20" />
                         <div className="flex items-center gap-3">
                             <span className="text-xs font-mono text-white/50 tracking-widest uppercase">SCORE</span>
-                            <span className="text-4xl font-black bg-gradient-to-r from-green-400 via-cyan-400 to-fuchsia-400 bg-clip-text text-transparent">
+                            <span data-testid="whack-score" className="text-4xl font-black bg-gradient-to-r from-green-400 via-cyan-400 to-fuchsia-400 bg-clip-text text-transparent">
                                 {score.toLocaleString()}
                             </span>
                         </div>
                         <div className="h-8 w-px bg-white/20" />
                         <div className="flex flex-col gap-1 font-mono text-xs">
                             <span className="text-cyan-300 font-bold">AVG: {metrics.reactionTimes.length > 0 ? (metrics.reactionTimes.reduce((a, b) => a + b, 0) / metrics.reactionTimes.length).toFixed(0) : 0}ms</span>
-                            <span className="text-green-400 font-bold">✓ {metrics.totalCorrect} <span className="text-white/30 mx-1">|</span> <span className="text-red-400">✗ {metrics.totalMisses}</span></span>
+                            <span data-testid="whack-hits" className="text-green-400 font-bold">✓ {metrics.totalCorrect} <span className="text-white/30 mx-1">|</span> <span className="text-red-400">✗ {metrics.totalMisses}</span></span>
                         </div>
                     </div>
 
@@ -200,7 +200,7 @@ export function WhackAMoleCanvas({ onStateChange }: WhackAMoleCanvasProps = {}) 
                                 </div>
                                 <div className="flex items-center justify-between gap-4">
                                     <span className="text-white/60 font-mono">LATENCY:</span>
-                                    <span className="text-cyan-300 font-mono">{isConnected ? `${latency.toFixed(0)}ms` : "OFFLINE"}</span>
+                                    <span data-testid="whack-latency" className="text-cyan-300 font-mono">{isConnected ? `${latency.toFixed(0)}ms` : "OFFLINE"}</span>
                                 </div>
                             </div>
                         </div>
@@ -208,7 +208,7 @@ export function WhackAMoleCanvas({ onStateChange }: WhackAMoleCanvasProps = {}) 
 
                     {/* CENTER ACTION AREA: Header & Grid (Deterministically positioned across horizon) */}
                     <div className="absolute top-52 left-1/2 -translate-x-1/2 z-10 w-full max-w-7xl flex flex-col items-center pointer-events-auto">
-                        <h1 className="h-16 flex items-center justify-center text-4xl font-black mb-4 text-white drop-shadow-lg tracking-wider">
+                        <h1 data-testid="whack-heading" data-state={gameState} data-target={targetLetter ?? undefined} className="h-16 flex items-center justify-center text-4xl font-black mb-4 text-white drop-shadow-lg tracking-wider">
                             {gameState === "playing" ? (
                                 <span>FIND <span className="text-fuchsia-400 text-6xl mx-3 drop-shadow-[0_0_25px_rgba(217,70,239,0.8)]">{targetLetter}</span> !</span>
                             ) : gameState === "cooldown" ? (
@@ -259,6 +259,7 @@ export function WhackAMoleCanvas({ onStateChange }: WhackAMoleCanvasProps = {}) 
                     </p>
 
                     <button
+                        data-testid="whack-start"
                         onClick={handleStartChallenge}
                         disabled={isCreating}
                         className="relative glass-button px-16 py-6 rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(45,226,230,0.4)] transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer border-2 border-cyan-400/60 group pointer-events-auto"

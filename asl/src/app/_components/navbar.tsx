@@ -96,6 +96,8 @@ const Navbar: React.FC = () => {
 
   return (
     <motion.div
+      data-testid="navbar"
+      data-hidden={isHidden ? "true" : "false"}
       initial={{ y: -50, opacity: 0 }}
       animate={{ y: isHidden ? -250 : 0, opacity: isHidden ? 0 : 1 }}
       transition={{ type: "spring", stiffness: 120, damping: 20 }}

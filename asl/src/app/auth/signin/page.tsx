@@ -35,10 +35,27 @@ export default function SignInPage() {
     void signIn("google", { callbackUrl: "/songselection" });
   };
 
+  const signInWithPassword = async () => {
+    const result = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
+    });
+
+    if (result?.error) {
+      setError("Invalid email or password");
+      setLoading(false);
+    } else {
+      router.push("/songselection");
+      router.refresh();
+    }
+  };
+
   const registerMutation = api.user.register.useMutation({
     onSuccess: async () => {
-      // Auto-login after successful registration
-      await handleAuth();
+      // Sign in with the new account. (This used to call handleAuth, which in register mode registers again
+      // and fails with "account already exists".)
+      await signInWithPassword();
     },
     onError: (err) => {
       setError(err.message);
@@ -54,19 +71,7 @@ export default function SignInPage() {
     if (isRegistering) {
       registerMutation.mutate({ email, password });
     } else {
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-      });
-
-      if (result?.error) {
-        setError("Invalid email or password");
-        setLoading(false);
-      } else {
-        router.push("/songselection");
-        router.refresh();
-      }
+      await signInWithPassword();
     }
   };
 
@@ -151,6 +156,8 @@ export default function SignInPage() {
           <AnimatePresence mode="wait">
             {error && (
               <motion.div
+                data-testid="auth-error"
+                role="alert"
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}

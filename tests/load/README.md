@@ -31,7 +31,9 @@ and the cap refuses the 51st socket cleanly.
 
 The server was burning more than ten cores on the desktop (every library using one thread per core on 32 logical cores) for a modest result.
 Pinning torch, OpenCV and BLAS to one thread each (`api_server_http.py`) gave, on the desktop: 25 players 262 to 349 fps (p50 78 to 62 ms) and 50 players 305 to 355 fps
-(p50 140 to 110 ms). The CT129 numbers after the same change are recorded in `docs/notes/gtx1070-triton-setup.md`.
+(p50 140 to 110 ms).
+
+After the change, on CT129 itself (production, over the LAN): 5 players 121 fps total (24 each, p50 46 ms), 10 players 151 fps (15 each, p95 78 ms), 25 players 174 fps (7 each, p50 141 ms), 50 players 179 fps (3.6 each, p50 343 ms): **no measurable difference**. The thread pinning helps the 32-thread desktop and does nothing for the 4-core machine, whose limit is the single asyncio loop. The comfortable number stays at about 10 simultaneous players.
 
 The remaining ceiling is the single asyncio loop doing frame preparation and the two model passes one batch at a time. If more than about 10
 simultaneous players are expected, the next step is moving frame preparation off the loop (a thread or process pool); that is deliberately not done
