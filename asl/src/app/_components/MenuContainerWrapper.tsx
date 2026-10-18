@@ -29,7 +29,7 @@ export function MenuContainerWrapper({ children }: { children: React.ReactNode }
   if (!isMenuRoute) {
     // Desktop: no wrapper at all (`contents`). Phone: leave room for the compact header so in-flow pages
     // (sign in, hero name, profile) do not start underneath it.
-    return <div className="contents max-sm:flex max-sm:flex-col max-sm:w-full max-sm:h-full max-sm:pt-[76px]">{children}</div>;
+    return <div className="contents compact:flex compact:flex-col compact:w-full compact:h-full compact:pt-[76px]">{children}</div>;
   }
 
   let borderColor = "border-white/30";
@@ -46,7 +46,7 @@ export function MenuContainerWrapper({ children }: { children: React.ReactNode }
         className={
           isWhackActive
             ? "absolute inset-0 w-full h-full z-50 rounded-none border-none mt-0 p-0 overflow-hidden pointer-events-auto bg-transparent"
-            : `z-100 absolute top-[200px] w-3/4 h-[800px] max-sm:top-[84px] max-sm:bottom-3 max-sm:h-auto max-sm:w-[calc(100%-1.5rem)] max-sm:px-4 max-sm:pt-6 max-sm:pb-4 border px-12 pt-20 pb-12 rounded-b-3xl rounded-t-xl glass-panel flex flex-col overflow-y-auto custom-scrollbar transition-all duration-500 pointer-events-auto shadow-2xl ${borderColor}`
+            : `z-100 absolute top-[200px] w-3/4 h-[800px] compact:top-[84px] compact:bottom-3 compact:h-auto compact:w-[calc(100%-1.5rem)] compact:px-4 compact:pt-6 compact:pb-4 border px-12 pt-20 pb-12 rounded-b-3xl rounded-t-xl glass-panel flex flex-col overflow-y-auto custom-scrollbar transition-all duration-500 pointer-events-auto shadow-2xl ${borderColor}`
         }
         style={!isWhackActive ? { background: "linear-gradient(to bottom, rgba(58,0,102,0.8), rgba(146,0,117,0.8), rgba(58,0,102,0.8))" } : {}}
       >
