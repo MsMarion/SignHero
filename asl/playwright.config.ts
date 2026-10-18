@@ -27,7 +27,7 @@ export default defineConfig({
     baseURL: APP_URL,
     viewport: { width: 1920, height: 1080 },
     // Locally use the installed Chrome; CI installs Playwright's own Chromium.
-    channel: process.env.CI ? undefined : "chrome",
+    channel: process.env.E2E_CHANNEL ?? (process.env.CI ? undefined : "chrome"),
     permissions: ["camera"],
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
