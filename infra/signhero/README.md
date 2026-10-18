@@ -84,6 +84,17 @@ chmod 600 /home/deploy/.ssh/authorized_keys && chown -R deploy:deploy /home/depl
 Verify the restriction (from CT113 as `signhero-runner`): `status` works; `id`, `status; id`, an unknown verb, `deploy abc`, a pty request,
 password login and port forwarding must all be refused.
 
+## Results and rollback gating
+Every `deploy` and `rollback` prints a last line `RESULT: released | skipped | noop | repaired | rolledback | failed`.
+`deploy.yml` records each host's result and the rollback job only rolls back a host that reported **released in this run**.
+A host that reported `skipped` (nothing in the change affects it) or `noop` (already on that commit) is never rolled back: a rollback
+there would undo an older release this run never touched. The smoke test is retried once before it counts as failed, so one flaky browser
+run cannot roll back a good release. The first automatic run (PR 18) showed why: a smoke failure after two skipped hosts rolled both back to
+an older release; production stayed healthy and was restored with the manual workflow, and the gating above was added.
+
+**Drill:** Actions > Deploy to production > Run workflow with `drill_smoke_failure` ticked makes the smoke test fail on purpose (dead API URL).
+After a no-op deploy the run ends red, the rollback job reports that nothing was released, and both hosts must be unchanged afterwards.
+
 ## Known limits
 - **A deploy briefly interrupts live play.** The frontend restart is about 3 seconds (one failed request in a 1-second probe of the public
   site); the backend swap is about 10 seconds during which the public backend endpoint answers 502. The game does not reconnect its
@@ -100,7 +111,7 @@ No GitHub secrets are used: the SSH key lives only on CT113, and the application
 `/opt/signhero/asl/.env` on CT119.
 
 ## Day to day
-- Merge a PR: CI runs on the PR, the deploy runs after the merge, the smoke test runs against production, and a failing smoke test rolls back.
+- Merge a PR: CI runs on the PR, the deploy runs after the merge, the smoke test runs against production, and a failing smoke test rolls back the hosts that run released.
 - **Actions > Manage production > Run workflow** for `status`, `backup`, `rollback`, or a `deploy` of a specific sha.
 - Updating the verb scripts themselves needs a manual copy to each host (they never update themselves): `scp` the file, then
   `install -o root -g root -m 755 ...` as above.

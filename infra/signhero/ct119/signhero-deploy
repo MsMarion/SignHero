@@ -33,6 +33,9 @@ HEALTH_PATH="${SIGNHERO_TEST_HEALTH_PATH:-/whack}"
 
 verb="${1:-}"
 arg="${2:-}"
+# What this run did, printed as the last line ("RESULT: ...") so the CI workflow knows whether anything
+# was released and therefore whether a rollback makes sense: released | skipped | noop | repaired | rolledback | failed
+RESULT=""
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 git_repo() { git -C "$REPO" "$@"; }
@@ -171,9 +174,9 @@ run_deploy() {
   prev=$(cur_sha); prev_dist=$(cur_dist)
 
   if [ "$prev" = "$sha" ]; then
-    if health_once; then log "already at ${sha:0:7} and healthy; nothing to do"; return 0; fi
+    if health_once; then log "already at ${sha:0:7} and healthy; nothing to do"; RESULT=noop; return 0; fi
     log "already at ${sha:0:7} but not healthy; restarting the service"
-    restart_service && health && return 0
+    if restart_service && health; then RESULT=repaired; return 0; fi
     echo "FAILED: still unhealthy. No code changed in this run, so there is nothing to roll back to." >&2
     return 1
   fi
@@ -181,6 +184,7 @@ run_deploy() {
   if ! affects_host "$prev" "$sha"; then
     git_repo merge --ff-only --quiet "$sha" || return 1
     log "no changes affect the frontend (docs, tests, CI or backend only): repo fast-forwarded to ${sha:0:7}, nothing to build or restart"
+    RESULT=skipped
     return 0
   fi
 
@@ -191,6 +195,7 @@ run_deploy() {
 
   if deploy_chain "$sha"; then
     prune_dists ".next-${sha:0:12}" "$prev_dist"
+    RESULT=released
     return 0
   fi
 
@@ -230,7 +235,7 @@ start=$SECONDS
 rc=0
 case "$verb" in
   backup)   backup_db || rc=1 ;;
-  rollback) run_rollback || rc=$? ;;
+  rollback) run_rollback || rc=$?; [ "$rc" -eq 0 ] && RESULT=rolledback ;;
   deploy)   run_deploy "$arg" || rc=$? ;;
 esac
 show_status
@@ -239,4 +244,5 @@ if [ "$rc" -eq 0 ]; then
 else
   echo "FAILED: $verb in $((SECONDS - start))s (exit $rc, see the log above)" >&2
 fi
+if [ "$verb" = deploy ] || [ "$verb" = rollback ]; then echo "RESULT: ${RESULT:-failed}"; fi
 exit "$rc"
