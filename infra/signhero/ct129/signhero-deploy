@@ -6,15 +6,20 @@
 # Verbs:
 #   status           show the deployed commit, image tag, container state and health (read-only)
 #   backup           nothing to back up on this host (the database lives on CT119)
-#   deploy <sha>     release commit <sha>, which must be on origin/main: fast-forward the clone, build
-#                    image signhero-api:<sha12> next to the running one, start it, health-check
-#                    (CUDA reported, and a real WebSocket frame answered by the model). Any failure
-#                    after the clone changes rolls back to the previous image automatically and
-#                    still exits non-zero.
-#   rollback         start the previous image again
+#   deploy <sha>     release commit <sha>, which must be on origin/main: fast-forward the clone and
+#                    recreate the container, then health-check (CUDA reported, and a real WebSocket
+#                    frame answered by the model). The container runs the backend code from the clone
+#                    (bind-mounted read-only), so a normal release needs NO image build: a few seconds
+#                    and no disk. Only when backend/Dockerfile or backend/requirements.txt change is a
+#                    new image built (tag signhero-api:<sha12>, next to the running one; needs 16 GB free).
+#                    Any failure after the clone changes rolls back automatically and still exits non-zero.
+#   rollback         restore the previous commit (and image tag) and recreate the container
 #
-# Triton and anything else on this host are never touched. The compose file is host-specific and
-# lives next to this install (see infra/signhero/README.md); it must use image signhero-api:${IMAGE_TAG}.
+# Why no rebuild: the image holds only the large dependencies (torch, mediapipe, ~12 GB). Rebuilding it
+# on this host needs the Docker build cache, which cannot be kept on a 55 GB disk next to Triton.
+# Triton and anything else on this host are never touched. The compose file is host-specific
+# (infra/signhero/ct129/docker-compose.host.example.yml): image signhero-api:${IMAGE_TAG} plus the two
+# read-only code mounts from /opt/signhero-repo.
 set -euo pipefail
 
 REPO=/opt/signhero-repo
@@ -24,7 +29,7 @@ SERVICE=signhero-api
 IMAGE=signhero-api
 STATE=/var/lib/signhero-deploy
 HEALTH_SECONDS=90
-MIN_FREE_GB=3          # normal deploy: a new tag only adds the changed top layers
+MIN_FREE_GB=1          # code-only release: nothing is built
 MIN_FREE_GB_HEAVY=16   # Dockerfile or requirements changed: the large torch layers are rebuilt
 # Only for manual testing as root (sudo from the CI key resets the environment, so CI cannot set it):
 EXPECT_DEVICE="${SIGNHERO_TEST_EXPECT_DEVICE:-cuda}"
@@ -102,34 +107,48 @@ prune_images() {
   docker image prune -f >/dev/null 2>&1 || true
 }
 
+is_heavy() { [ -n "$(git_repo diff --name-only "$1" "$2" -- backend/Dockerfile backend/requirements.txt | head -1)" ]; }
+
+# heavy=yes builds a new image; heavy=no just recreates the container on the current image, which
+# runs the code from the (already fast-forwarded) clone.
 deploy_chain() {
-  local sha="$1" tag="${1:0:12}"
+  local sha="$1" heavy="$2" cur_image_tag="$3" tag
   git_repo merge --ff-only --quiet "$sha" || return 1
   log "clone at: $(git_repo log --format='%h %s' -1 | cut -c1-90)"
 
-  log "building $IMAGE:$tag (cached layers are reused when requirements are unchanged)"
-  IMAGE_TAG="$tag" compose build > /tmp/signhero-api-build.log 2>&1 \
-    || { echo "build failed; last lines:" >&2; tail -15 /tmp/signhero-api-build.log >&2; return 1; }
+  if [ "$heavy" = yes ]; then
+    tag="${sha:0:12}"
+    log "building $IMAGE:$tag (the Dockerfile or requirements changed)"
+    IMAGE_TAG="$tag" compose build > /tmp/signhero-api-build.log 2>&1 \
+      || { echo "build failed; last lines:" >&2; tail -15 /tmp/signhero-api-build.log >&2; return 1; }
+  else
+    tag="$cur_image_tag"
+    log "code-only release: the container runs the code from the clone, so no image build is needed"
+  fi
 
-  log "starting $IMAGE:$tag"
-  IMAGE_TAG="$tag" compose up -d --no-build >/dev/null 2>&1 || return 1
+  log "recreating the backend on image $IMAGE:$tag"
+  IMAGE_TAG="$tag" compose up -d --no-build --force-recreate >/dev/null 2>&1 || return 1
   health
 }
 
 rollback_to() {
   local sha="$1" tag="$2"
+  # The failure-drill hook (SIGNHERO_TEST_EXPECT_DEVICE) must only fail the NEW release, never the
+  # restored one, or the drill could not show a rollback succeeding.
+  local EXPECT_DEVICE=cuda
   log "rolling back to ${sha:0:7} (image $IMAGE:$tag)"
   if ! docker image inspect "$IMAGE:$tag" >/dev/null 2>&1; then
     echo "the previous image $IMAGE:$tag is gone, so it cannot be restored automatically" >&2
     return 1
   fi
   git_repo reset --hard --quiet "$sha" || return 1
-  IMAGE_TAG="$tag" compose up -d --no-build >/dev/null 2>&1 || return 1
+  # Recreate even when the image tag is unchanged: the code comes from the clone, which just moved back.
+  IMAGE_TAG="$tag" compose up -d --no-build --force-recreate >/dev/null 2>&1 || return 1
   health
 }
 
 preflight_deploy() {
-  local sha="$1" prev="$2" heavy need
+  local sha="$1"
   if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then echo "abort: deploy needs a full 40-character commit sha" >&2; return 3; fi
   if [ -n "$(git_repo status --porcelain --untracked-files=no)" ]; then echo "abort: tracked files are modified in $REPO" >&2; return 3; fi
   timeout 90 git -C "$REPO" fetch --quiet origin main || { echo "abort: could not fetch origin main" >&2; return 3; }
@@ -138,9 +157,12 @@ preflight_deploy() {
     echo "abort: $sha is not on origin/main, refusing to deploy it" >&2
     return 3
   fi
-  heavy=$(git_repo diff --name-only "$prev" "$sha" -- backend/Dockerfile backend/requirements.txt | head -1)
-  need=$MIN_FREE_GB
-  if [ -n "$heavy" ]; then need=$MIN_FREE_GB_HEAVY; log "the Dockerfile or requirements changed: the large layers will be rebuilt"; fi
+}
+
+# Run AFTER preflight (which fetches), so the release kind is decided with the new commit present.
+check_disk() {
+  local heavy="$1" need=$MIN_FREE_GB
+  if [ "$heavy" = yes ]; then need=$MIN_FREE_GB_HEAVY; log "the Dockerfile or requirements changed: a new image will be built"; fi
   if [ "$(free_gb)" -lt "$need" ]; then
     echo "abort: only $(free_gb) GB free, this deploy needs $need GB (free space on CT129 first)" >&2
     return 3
@@ -148,14 +170,16 @@ preflight_deploy() {
 }
 
 run_deploy() {
-  local sha="$1" prev prev_tag
+  local sha="$1" prev prev_tag heavy=no
   prev=$(cur_sha); prev_tag=$(cur_tag)
-  preflight_deploy "$sha" "$prev" || return $?
+  preflight_deploy "$sha" || return $?
+  if is_heavy "$prev" "$sha"; then heavy=yes; fi
+  check_disk "$heavy" || return $?
 
   if [ "$prev" = "$sha" ]; then
     if health_once; then log "already at ${sha:0:7} and healthy; nothing to do"; return 0; fi
-    log "already at ${sha:0:7} but not healthy; starting the current image again"
-    IMAGE_TAG="$prev_tag" compose up -d --no-build >/dev/null 2>&1 && health && return 0
+    log "already at ${sha:0:7} but not healthy; recreating the container"
+    IMAGE_TAG="$prev_tag" compose up -d --no-build --force-recreate >/dev/null 2>&1 && health && return 0
     echo "FAILED: still unhealthy. No code changed in this run, so there is nothing to roll back to." >&2
     return 1
   fi
@@ -163,8 +187,8 @@ run_deploy() {
   # Remember what to return to BEFORE anything changes, so the rollback verb works after any failure.
   printf '%s\n' "$prev" > "$STATE/prev-sha"; printf '%s\n' "$prev_tag" > "$STATE/prev-tag"
 
-  if deploy_chain "$sha"; then
-    prune_images "${sha:0:12}" "$prev_tag"
+  if deploy_chain "$sha" "$heavy" "$prev_tag"; then
+    if [ "$heavy" = yes ]; then prune_images "${sha:0:12}" "$prev_tag"; fi
     return 0
   fi
 

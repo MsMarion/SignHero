@@ -125,6 +125,9 @@ deploy_chain() {
 
 rollback_to() {
   local sha="$1" dist="$2"
+  # The failure-drill hook (SIGNHERO_TEST_HEALTH_PATH) must only fail the NEW release, never the
+  # restored one, or the drill could not show a rollback succeeding.
+  local HEALTH_PATH=/whack
   log "rolling back to ${sha:0:7} (build folder $dist)"
   restore_generated
   if [ ! -d "$APP/$dist" ]; then

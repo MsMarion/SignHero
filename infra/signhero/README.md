@@ -31,9 +31,12 @@ branch cannot get code deployed.
 fast-forward, `pnpm install`, **build aside** into `.next-<sha12>` while the current release keeps serving,
 `prisma db push` (no `--accept-data-loss`, so a destructive change aborts before anything is switched),
 write `NEXT_DIST_DIR` to `/etc/signhero/dist.env`, restart (about 3 s), health-check. Old build folders are pruned (current and previous kept).
-**CT129:** same sha checks, fast-forward `/opt/signhero-repo`, build image `signhero-api:<sha12>` (cached torch layers are reused unless
-`backend/Dockerfile` or `backend/requirements.txt` changed, in which case 16 GB must be free), start it, health-check (CUDA, and a real
-WebSocket frame answered by the model), prune old tags (current and previous kept). Triton is never touched.
+**CT129:** same sha checks, fast-forward `/opt/signhero-repo`, recreate the container, health-check (CUDA, and a real WebSocket frame
+answered by the model). The container runs the backend **code from the clone** (mounted read-only), so a normal release builds nothing:
+about 15 seconds and no disk. A new image (`signhero-api:<sha12>`, next to the running one) is built only when `backend/Dockerfile` or
+`backend/requirements.txt` change, and then 16 GB must be free or the deploy refuses before changing anything. Triton is never touched.
+Why no rebuild by default: the image is about 12 GB of dependencies, and rebuilding it needs the Docker build cache, which does not fit on
+CT129's 55 GB disk next to Triton (an attempt with the cache cleared ran out of disk; the deploy rolled back and the backend never went down).
 
 Any failure after the repository changes rolls back automatically and still exits non-zero.
 **Database changes must be additive.** `rollback` does not restore the database; restoring a dump is a manual step on purpose:
@@ -73,11 +76,21 @@ chmod 600 /home/deploy/.ssh/authorized_keys && chown -R deploy:deploy /home/depl
 ```
 **CT119 only:** `mkdir -p /var/backups/signhero /etc/signhero`, and add `EnvironmentFile=-/etc/signhero/dist.env` to
 `/etc/systemd/system/signhero-frontend.service` (the dash makes it optional), then `systemctl daemon-reload`.
-**CT129 only:** the host compose `/opt/signhero-api-prod/docker-compose.yml` (not in git; uses the NVIDIA runtime) must name its image
-`signhero-api:${IMAGE_TAG:-prod}`; the repository clone is `/opt/signhero-repo`.
+**CT129 only:** clone the repo to `/opt/signhero-repo` (`git clone https://github.com/MsMarion/SignHero.git`) and install
+`ct129/docker-compose.host.example.yml` as `/opt/signhero-api-prod/docker-compose.yml` (it uses the NVIDIA runtime, names the image
+`signhero-api:${IMAGE_TAG:-prod}`, and mounts the backend code from the clone read-only). Build the image once by hand
+(`cd /opt/signhero-api-prod && docker compose build`).
 
 Verify the restriction (from CT113 as `signhero-runner`): `status` works; `id`, `status; id`, an unknown verb, `deploy abc`, a pty request,
 password login and port forwarding must all be refused.
+
+## Known limits
+- **A deploy briefly interrupts live play.** The frontend restart is about 3 seconds (one failed request in a 1-second probe of the public
+  site); the backend swap is about 10 seconds during which the public backend endpoint answers 502. The game does not reconnect its
+  detection WebSocket by itself, so a round in progress at that moment loses detection until the player starts the next game. Prefer quiet times.
+- Rollback never restores the database; schema changes must be additive.
+- The Mongo dumps are on CT119's own disk (newest 10 kept), so they do not survive losing that disk.
+- The verb scripts and the CT129 host compose are installed by hand; changing them needs a manual copy to each host.
 
 ## Repository settings
 `main` is protected: a pull request is required, the three CI checks (`web (types and build)`, `account tests (MongoDB)`,
