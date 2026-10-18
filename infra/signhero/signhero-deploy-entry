@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Forced command for the CI deploy key (installed as /usr/local/bin/signhero-deploy-entry on CT119
+# and CT129). sshd runs this for every connection made with that key, whatever command the client
+# asked for; the original request arrives in SSH_ORIGINAL_COMMAND. Only the whitelisted verbs below
+# are passed on, and only as the root-owned signhero-deploy script via sudo.
+set -euo pipefail
+
+cmd="${SSH_ORIGINAL_COMMAND:-}"
+if [[ ! "$cmd" =~ ^(status|backup|rollback|deploy\ [0-9a-f]{40})$ ]]; then
+  echo "rejected: allowed requests are: status | backup | rollback | deploy <40-hex commit sha>" >&2
+  exit 2
+fi
+
+# $cmd is fully validated above (a verb, or "deploy" plus a 40-character hex string), so the
+# word splitting is intentional and safe.
+# shellcheck disable=SC2086
+exec sudo -n /usr/local/bin/signhero-deploy $cmd

@@ -1,0 +1,64 @@
+name: Manage production
+
+# Manual control from the Actions tab (Run workflow). Same restricted SSH verbs as the deploy workflow.
+#   status       show the deployed commit, build/image and health
+#   backup       dump the MongoDB database on the frontend host (the GPU host has nothing to back up)
+#   rollback     return to the previous release
+#   deploy       release a specific commit (it must be on main); give its full 40-character sha
+on:
+  workflow_dispatch:
+    inputs:
+      host:
+        description: Which host
+        type: choice
+        options: [both, frontend-ct119, backend-ct129]
+        default: both
+      action:
+        description: What to run
+        type: choice
+        options: [status, backup, rollback, deploy]
+        default: status
+      sha:
+        description: Full commit sha (only for deploy)
+        type: string
+        required: false
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: run on the selected host(s)
+    runs-on: [self-hosted, signhero-deploy]
+    timeout-minutes: 45
+    steps:
+      - name: Run the selected action
+        env:
+          HOST: ${{ inputs.host }}
+          ACTION: ${{ inputs.action }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          case "$ACTION" in
+            status|backup|rollback) cmd="$ACTION" ;;
+            deploy)
+              if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then echo "deploy needs a full 40-character sha" >&2; exit 2; fi
+              cmd="deploy $SHA" ;;
+            *) echo "unknown action" >&2; exit 2 ;;
+          esac
+          rc=0
+          # backend first when deploying, frontend first when rolling back (reverse order of dependency)
+          if [ "$ACTION" = rollback ]; then order="ct119 ct129"; else order="ct129 ct119"; fi
+          for h in $order; do
+            case "$HOST" in
+              both) ;;
+              frontend-ct119) [ "$h" = ct119 ] || continue ;;
+              backend-ct129)  [ "$h" = ct129 ] || continue ;;
+            esac
+            echo "=== $h: $cmd"
+            ssh "signhero-$h" "$cmd" || rc=1
+          done
+          exit "$rc"
