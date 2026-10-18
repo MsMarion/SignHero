@@ -1,6 +1,9 @@
 import { test, expect } from "../support/helpers";
 import { SEED } from "../support/seed-ids";
 
+// The report card drifts with the mouse (a decorative parallax animation), so Playwright's "element is stable"
+// check can fail forever on a slow machine. The clicks below are forced; what they do is still asserted.
+
 // The planted rows (e2e/seed.ts): four leaderboard entries scoring 99000-96000, and four finished games.
 
 test.describe("leaderboard", () => {
@@ -33,10 +36,10 @@ test.describe("leaderboard", () => {
 
   test("[L-03] REPORT and LEADERBOARD switch the view", async ({ page }) => {
     await page.goto(`/leaderboard?playerId=${SEED.reportPlayer}`);
-    await page.getByRole("button", { name: "LEADERBOARD" }).click();
+    await page.getByRole("button", { name: "LEADERBOARD" }).click({ force: true });
     await expect(page.getByRole("heading", { name: "LEADERBOARD" })).toBeVisible();
     await expect(page.getByText("E2E BRAVO")).toBeVisible();
-    await page.getByRole("button", { name: "REPORT" }).click();
+    await page.getByRole("button", { name: "REPORT" }).click({ force: true });
     await expect(page.getByRole("heading", { name: "GAME REPORT" })).toBeVisible();
   });
 
@@ -65,7 +68,7 @@ test.describe("leaderboard", () => {
     test(`[L-07] ${label} as the game id shows "report not found" and a way to the leaderboard`, async ({ page }) => {
       await page.goto(`/leaderboard?playerId=${id}`);
       await expect(page.getByText("REPORT DATA NOT FOUND")).toBeVisible();
-      await page.getByRole("button", { name: "VIEW GLOBAL LEADERBOARD" }).click();
+      await page.getByRole("button", { name: "VIEW GLOBAL LEADERBOARD" }).click({ force: true });
       await expect(page.getByRole("heading", { name: "LEADERBOARD" })).toBeVisible();
       await expect(page.getByText("E2E BRAVO")).toBeVisible();
     });
@@ -76,7 +79,7 @@ test.describe("leaderboard", () => {
     await expect(page.getByLabel("Back to Home")).toHaveAttribute("href", "/");
     await page.goto(`/leaderboard?playerId=${SEED.reportPlayer}`);
     await expect(page.getByLabel("Back to Whack-a-Sign")).toHaveAttribute("href", "/whack");
-    await page.getByLabel("Back to Whack-a-Sign").click();
+    await page.getByLabel("Back to Whack-a-Sign").click({ force: true });
     await expect(page).toHaveURL(/\/whack/);
   });
 
@@ -95,7 +98,7 @@ test.describe("leaderboard", () => {
     await expect(page.getByText("LOADING...")).toBeVisible();
     await expect(page.getByTestId("leaderboard-error")).toBeVisible({ timeout: 20_000 });
     fail = false;
-    await page.getByRole("button", { name: "RETRY" }).click();
+    await page.getByRole("button", { name: "RETRY" }).click({ force: true });
     await expect(page.getByText("E2E BRAVO")).toBeVisible({ timeout: 20_000 });
   });
 });

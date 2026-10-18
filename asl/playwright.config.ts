@@ -14,7 +14,9 @@ export default defineConfig({
   testDir: "./e2e/tests",
   globalSetup: "./e2e/global-setup.ts",
   globalTimeout: 30 * 60_000,
-  fullyParallel: false,
+  // Tests run one at a time (workers: 1: they share the mock detection server) but are listed as independent,
+  // so CI can split them evenly across shards instead of by file.
+  fullyParallel: true,
   workers: 1,
   timeout: 60_000,
   expect: { timeout: 10_000 },

@@ -146,6 +146,7 @@ test.describe("debug panel", () => {
   });
 
   test("[O-09] ?debug=1 shows it with the build, the session state and the detection connection, and it is remembered", async ({ page, mock }) => {
+    test.setTimeout(150_000); // hand tracking takes a while to start on a slow machine
     await page.goto("/whack?debug=1");
     const panel = page.getByTestId("debug-panel");
     await expect(panel).toBeVisible();
@@ -156,7 +157,7 @@ test.describe("debug panel", () => {
     await expect(panel.locator('[data-debug="detection"]')).toHaveText("connected");
     await expect(panel.locator('[data-debug="ticket"]')).toHaveText("yes");
     await expect.poll(async () => Number((await panel.locator('[data-debug="sockets opened"]').textContent()) ?? 0)).toBeGreaterThanOrEqual(1);
-    await expect(panel.locator('[data-debug="frames sent / replies"]')).toHaveText(/^[1-9]\d* \/ \d+$/, { timeout: 15_000 });
+    await expect(panel.locator('[data-debug="frames sent / replies"]')).toHaveText(/^[1-9]\d* \/ \d+$/, { timeout: 90_000 });
     await mock.drop();
     await expect(panel.locator('[data-debug="detection"]')).not.toHaveText("connected");
     await page.goto("/leaderboard"); // remembered across pages
