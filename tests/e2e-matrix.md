@@ -8,7 +8,7 @@ How the suite works: `pnpm e2e:build` builds the site exactly as production does
 (`asl/e2e/support/mock-backend.mjs`) and a throwaway database (`signhero_e2e`, wiped and seeded at the start of each run);
 `pnpm e2e` drives real Chrome with a fake camera. The mock can be told to drop the connection, go down, require tickets, or report a
 chosen letter, which is how every connection and camera state is reproduced. It needs a MongoDB replica set (the Docker one on port 4002
-locally, a service container in CI). The full suite takes about 12 minutes because three tests play a real 30-second game; CI runs it as six parallel shards. Use Node 22 (or 20) to run it: Playwright 1.52 hangs while loading its configuration on the Node 24.21 that the other CI jobs use (it happens to work on Node 24.11 on a developer machine), so the CI job pins Node 22.
+locally, a service container in CI). The full suite takes about 12 minutes because three tests play a real 30-second game; CI runs it as six parallel shards. On CI the page sends simulated "no hand" frames instead of running MediaPipe (hand tracking in software rendering starves a two-core runner for a minute); a local `pnpm e2e` runs the real MediaPipe path, and the production smoke test covers it after every deploy. Use Node 22 (or 20) to run it: Playwright 1.52 hangs while loading its configuration on the Node 24.21 that the other CI jobs use (it happens to work on Node 24.11 on a developer machine), so the CI job pins Node 22.
 
 Legend: **page** = what the player sees; **API** = server behaviour the page depends on.
 

@@ -158,8 +158,11 @@ test.describe("debug panel", () => {
     await expect(panel.locator('[data-debug="ticket"]')).toHaveText("yes");
     await expect.poll(async () => Number((await panel.locator('[data-debug="sockets opened"]').textContent()) ?? 0)).toBeGreaterThanOrEqual(1);
     await expect(panel.locator('[data-debug="frames sent / replies"]')).toHaveText(/^[1-9]\d* \/ \d+$/, { timeout: 90_000 * SLOW });
+    // the page reconnects within a fraction of a second, so look at the count of sockets it has opened instead of
+    // trying to catch the brief "disconnected" state
     await mock.drop();
-    await expect(panel.locator('[data-debug="detection"]')).not.toHaveText("connected");
+    await expect.poll(async () => Number((await panel.locator('[data-debug="sockets opened"]').textContent()) ?? 0), { timeout: 60_000 }).toBeGreaterThanOrEqual(2);
+    await expect(panel.locator('[data-debug="detection"]')).toHaveText("connected", { timeout: 60_000 });
     await page.goto("/leaderboard"); // remembered across pages
     await expect(page.getByTestId("debug-panel")).toBeVisible();
     await page.goto("/leaderboard?debug=0");

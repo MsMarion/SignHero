@@ -121,7 +121,9 @@ export async function startGame(page: Page) {
   await expect(heading(page)).not.toHaveAttribute("data-state", "idle");
 }
 
-export async function waitForPlaying(page: Page, timeout = 15_000 * SLOW) {
+// The first game start on a cold CI runner can take over a minute: the 3-second countdown shares a starved page with the
+// hand-tracking start-up. Locally it is a few seconds.
+export async function waitForPlaying(page: Page, timeout = process.env.CI ? 150_000 : 15_000) {
   await expect(heading(page)).toHaveAttribute("data-state", "playing", { timeout });
 }
 

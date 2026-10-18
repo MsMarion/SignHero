@@ -205,9 +205,24 @@ export function useSignDetection(
 
     let mounted = true;
     let lastSendTime = 0;
+    let simulatedFrames: ReturnType<typeof setInterval> | null = null;
 
     async function initMediaPipe() {
       try {
+        // Test builds only (NEXT_PUBLIC_SIMULATED_FRAMES=1, set by e2e/build.mjs on CI): hand tracking is WebGL in
+        // software on a two-core CI runner, which starves the page for a minute. Send "no hand" frames over the same
+        // protocol instead, so everything downstream of the camera is still exercised. Never set in production.
+        if (process.env.NEXT_PUBLIC_SIMULATED_FRAMES === "1") {
+          simulatedFrames = setInterval(() => {
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && !isSendingRef.current) {
+              isSendingRef.current = true;
+              lastSendAtRef.current = Date.now();
+              debugInc("sends");
+              wsRef.current.send(JSON.stringify({ clientTimestamp: performance.now() / 1000, handDetected: false, landmarks: [] }));
+            }
+          }, 50);
+          return;
+        }
         const { Hands } = await import("@mediapipe/hands");
         const hands = new Hands({
           // Served by this site (scripts/copy-mediapipe.mjs), not a third-party CDN.
@@ -272,6 +287,7 @@ export function useSignDetection(
 
     return () => {
       mounted = false;
+      if (simulatedFrames) clearInterval(simulatedFrames);
       cancelAnimationFrame(animFrameRef.current);
       if (handsRef.current && typeof handsRef.current.close === "function") {
         try { handsRef.current.close(); } catch (e) {}

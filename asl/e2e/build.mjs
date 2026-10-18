@@ -14,6 +14,9 @@ const env = {
   // Baked into the browser bundle at build time, so it must be set here, not only when serving.
   NEXT_PUBLIC_WS_URL: `ws://127.0.0.1:${process.env.E2E_MOCK_PORT ?? 4011}/ws/predict`,
   SKIP_ENV_VALIDATION: "1",
+  // On CI the page sends simulated empty frames instead of running hand tracking in software rendering, which
+  // starves a small runner (see useSignDetection.ts). Locally the real MediaPipe path runs.
+  NEXT_PUBLIC_SIMULATED_FRAMES: process.env.CI ? "1" : "",
   GOOGLE_CLIENT_ID: "",
   GOOGLE_CLIENT_SECRET: "",
 };

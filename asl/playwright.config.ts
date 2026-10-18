@@ -19,7 +19,7 @@ export default defineConfig({
   fullyParallel: true,
   workers: 1,
   // CI runners are slow (see SLOW in e2e/support/helpers.ts), so everything gets three times as long there.
-  timeout: process.env.CI ? 180_000 : 60_000,
+  timeout: process.env.CI ? 240_000 : 60_000,
   expect: { timeout: process.env.CI ? 30_000 : 10_000 },
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI
