@@ -13,13 +13,14 @@ import { APP_PORT, APP_URL, MOCK_PORT, MOCK_URL, TICKET_SECRET, appEnv } from ".
 export default defineConfig({
   testDir: "./e2e/tests",
   globalSetup: "./e2e/global-setup.ts",
-  globalTimeout: 30 * 60_000,
+  globalTimeout: 45 * 60_000,
   // Tests run one at a time (workers: 1: they share the mock detection server) but are listed as independent,
   // so CI can split them evenly across shards instead of by file.
   fullyParallel: true,
   workers: 1,
-  timeout: 60_000,
-  expect: { timeout: 10_000 },
+  // CI runners are slow (see SLOW in e2e/support/helpers.ts), so everything gets three times as long there.
+  timeout: process.env.CI ? 180_000 : 60_000,
+  expect: { timeout: process.env.CI ? 30_000 : 10_000 },
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI
     ? [["list"], ["html", { open: "never", outputFolder: "e2e-report" }], ["junit", { outputFile: "e2e-results/junit.xml" }]]

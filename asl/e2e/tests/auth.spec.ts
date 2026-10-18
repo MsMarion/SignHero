@@ -1,14 +1,4 @@
-import {
-  test,
-  expect,
-  PASSWORD,
-  uniqueEmail,
-  uniqueHeroName,
-  registerViaApi,
-  signIn,
-  claimHeroName,
-  signedInHero,
-} from "../support/helpers";
+import { test, expect, PASSWORD, uniqueEmail, uniqueHeroName, registerViaApi, signIn, claimHeroName, signedInHero, SLOW } from "../support/helpers";
 
 const feedback = (page: import("@playwright/test").Page) => page.getByTestId("hero-name-feedback");
 
@@ -44,7 +34,7 @@ test.describe("sign in and register", () => {
     await page.getByPlaceholder("hero@asl.com").fill(uniqueEmail("register"));
     await page.locator('input[type="password"]').fill(PASSWORD);
     await page.getByRole("button", { name: "REGISTER" }).click();
-    await page.waitForURL("**/auth/hero-name", { timeout: 20_000 });
+    await page.waitForURL("**/auth/hero-name", { timeout: 20_000 * SLOW });
     await expect(page.locator("#hero-name")).toBeVisible();
   });
 

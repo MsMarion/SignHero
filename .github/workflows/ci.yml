@@ -84,13 +84,13 @@ jobs:
         run: pnpm test:account
 
   e2e:
-    name: end-to-end (real browser, every page) [shard ${{ matrix.shard }}/4]
+    name: end-to-end (real browser, every page) [shard ${{ matrix.shard }}/6]
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 65
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     defaults:
       run:
         working-directory: asl
@@ -119,9 +119,9 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - name: Build the site like production, wired to the mock detection server
         run: pnpm e2e:build
-      - name: Run this quarter of the end-to-end suite
-        timeout-minutes: 30
-        run: pnpm e2e --shard=${{ matrix.shard }}/4
+      - name: Run this sixth of the end-to-end suite
+        timeout-minutes: 50
+        run: pnpm e2e --shard=${{ matrix.shard }}/6
       - name: Keep the report, traces and screenshots
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

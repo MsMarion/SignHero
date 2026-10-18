@@ -1,19 +1,4 @@
-import {
-  test,
-  expect,
-  signedInHero,
-  openWhack,
-  startGame,
-  waitForPlaying,
-  currentTarget,
-  scoreOf,
-  hitsOf,
-  waitForDetection,
-  hitWithKeyboard,
-  failCamera,
-  finishGame,
-  heading,
-} from "../support/helpers";
+import { test, expect, signedInHero, openWhack, startGame, waitForPlaying, currentTarget, scoreOf, hitsOf, waitForDetection, hitWithKeyboard, failCamera, finishGame, heading, SLOW } from "../support/helpers";
 import { APP_URL } from "../support/env";
 
 const LETTERS = "ABCDEFGHIKLMNOPQRSTUVWXY".split(""); // A-Y without J and Z (they need motion)
@@ -35,7 +20,7 @@ test.describe("Whack-A-Sign: lobby and start", () => {
     const target = await currentTarget(page);
     expect(LETTERS).toContain(target);
     await expect(page.getByTestId("whack-timer")).toHaveText(/^0:(30|29|28|27)$/);
-    await expect.poll(async () => page.getByTestId("whack-timer").textContent(), { timeout: 5000 }).not.toBe("0:30");
+    await expect.poll(async () => page.getByTestId("whack-timer").textContent(), { timeout: 5000 * SLOW }).not.toBe("0:30");
     await expect(page.getByTestId("whack-score")).toHaveText("0");
   });
 
@@ -118,7 +103,7 @@ test.describe("Whack-A-Sign: scoring", () => {
     await waitForDetection(page);
     const target = await currentTarget(page);
     await mock.control({ forceLetter: target });
-    await expect.poll(() => hitsOf(page), { timeout: 10_000 }).toBe(1);
+    await expect.poll(() => hitsOf(page), { timeout: 10_000 * SLOW }).toBe(1);
     await expect(page.getByText("DETECTED", { exact: true })).toBeVisible();
   });
 
@@ -136,7 +121,7 @@ test.describe("Whack-A-Sign: camera and detection connection", () => {
   test("[W-09] with the camera and detection server working the page says LIVE, Connected and a latency", async ({ page, problems }) => {
     await startGame(page);
     await waitForPlaying(page);
-    await expect(page.getByText("LIVE", { exact: true })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("LIVE", { exact: true })).toBeVisible({ timeout: 20_000 * SLOW });
     await expect(page.getByText("Connected", { exact: true })).toBeVisible();
     await expect(page.getByTestId("whack-latency")).toHaveText(/^\d+ms$/);
     expect(problems, problems.join("\n")).toEqual([]);
@@ -147,7 +132,7 @@ test.describe("Whack-A-Sign: camera and detection connection", () => {
     await hitWithKeyboard(page);
     await waitForPlaying(page);
     await mock.control({ down: true });
-    await expect(page.getByTestId("whack-latency")).toHaveText("OFFLINE", { timeout: 15_000 });
+    await expect(page.getByTestId("whack-latency")).toHaveText("OFFLINE", { timeout: 15_000 * SLOW });
     await expect(page.getByText("Reconnecting...")).toBeVisible();
     const before = await hitsOf(page);
     await page.keyboard.press((await currentTarget(page)).toLowerCase());
@@ -164,7 +149,7 @@ test.describe("Whack-A-Sign: camera and detection connection", () => {
     await waitForDetection(page);
     const first = Number((await mock.state()).connections);
     await mock.drop();
-    await expect.poll(async () => Number((await mock.state()).connections), { timeout: 15_000 }).toBeGreaterThan(first);
+    await expect.poll(async () => Number((await mock.state()).connections), { timeout: 15_000 * SLOW }).toBeGreaterThan(first);
     await waitForDetection(page);
     await hitWithKeyboard(page);
   });
@@ -205,12 +190,12 @@ test.describe("Whack-A-Sign: camera and detection connection", () => {
     await startGame(page);
     await waitForPlaying(page);
     await expect(page.getByTestId("whack-latency")).toHaveText("OFFLINE");
-    await expect.poll(async () => Number((await mock.state()).rejected), { timeout: 15_000 }).toBeGreaterThanOrEqual(2);
+    await expect.poll(async () => Number((await mock.state()).rejected), { timeout: 15_000 * SLOW }).toBeGreaterThanOrEqual(2);
   });
 });
 
 test.describe("Whack-A-Sign: a whole game", () => {
-  test.setTimeout(150_000);
+  test.setTimeout(150_000 * SLOW);
 
   test("[W-16] a guest plays 30 seconds, the result is saved by the server and shown on the report", async ({ page, request, problems }) => {
     await startGame(page);
@@ -218,7 +203,7 @@ test.describe("Whack-A-Sign: a whole game", () => {
     await waitForPlaying(page);
     await hitWithKeyboard(page);
     const score = await scoreOf(page);
-    await expect(page.getByText("TIME'S UP!")).toBeVisible({ timeout: 60_000 }).catch(() => undefined); // may already have redirected
+    await expect(page.getByText("TIME'S UP!")).toBeVisible({ timeout: 60_000 * SLOW }).catch(() => undefined); // may already have redirected
     const playerId = await finishGame(page);
 
     await expect(page.getByRole("heading", { name: "GAME REPORT" })).toBeVisible();

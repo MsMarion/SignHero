@@ -3,6 +3,12 @@ import { APP_URL, MOCK_URL } from "./env";
 
 export { expect };
 
+/**
+ * Waits are multiplied on CI: the shared runners have two slow cores, and hand tracking (WebGL in software) starves the
+ * page's timers, so a 3-second countdown can take 20. The tests check that things happen, not how fast.
+ */
+export const SLOW = process.env.CI ? 3 : 1;
+
 /** Control channel to the mock detection server (see mock-backend.mjs). */
 export class Mock {
   constructor(private request: APIRequestContext) {}
@@ -115,7 +121,7 @@ export async function startGame(page: Page) {
   await expect(heading(page)).not.toHaveAttribute("data-state", "idle");
 }
 
-export async function waitForPlaying(page: Page, timeout = 15_000) {
+export async function waitForPlaying(page: Page, timeout = 15_000 * SLOW) {
   await expect(heading(page)).toHaveAttribute("data-state", "playing", { timeout });
 }
 
@@ -138,7 +144,7 @@ export async function hitsOf(page: Page): Promise<number> {
 
 /** Waits for the detection socket to be open (latency shows milliseconds instead of OFFLINE). */
 export async function waitForDetection(page: Page) {
-  await expect(page.getByTestId("whack-latency")).not.toHaveText("OFFLINE", { timeout: 20_000 });
+  await expect(page.getByTestId("whack-latency")).not.toHaveText("OFFLINE", { timeout: 20_000 * SLOW });
 }
 
 /** Presses the target letter and waits for the score to go up. */
@@ -147,7 +153,7 @@ export async function hitWithKeyboard(page: Page) {
   const before = await hitsOf(page);
   const letter = await currentTarget(page);
   await page.keyboard.press(letter.toLowerCase());
-  await expect.poll(() => hitsOf(page), { timeout: 8000 }).toBe(before + 1);
+  await expect.poll(() => hitsOf(page), { timeout: 8000 * SLOW }).toBe(before + 1);
 }
 
 /** Overrides getUserMedia so the page sees a camera failure (must be added before navigating). */
@@ -159,6 +165,6 @@ export async function failCamera(page: Page, errorName: "NotAllowedError" | "Not
 
 /** Plays out the clock: waits for the game to finish and the redirect to the leaderboard. */
 export async function finishGame(page: Page) {
-  await page.waitForURL("**/leaderboard?playerId=*", { timeout: 60_000 });
+  await page.waitForURL("**/leaderboard?playerId=*", { timeout: 60_000 * SLOW });
   return new URL(page.url()).searchParams.get("playerId")!;
 }
