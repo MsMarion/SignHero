@@ -1,23 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { computeLayout, type Layout } from "~/lib/layout";
 
-/** Same cut-off as Tailwind's `max-sm:` variant (under 640 px wide), so layout code and CSS classes agree. */
-export const PHONE_MAX_WIDTH = 639;
+const SERVER_LAYOUT: Layout = { mode: "desktop", stageWidth: 1920, rotatePrompt: false };
 
-export function isPhoneWidth(width: number): boolean {
-  return width <= PHONE_MAX_WIDTH;
+/** The layout for the current window; follows resizes and rotation. Desktop on the server and until the first client render. */
+export function useLayout(): Layout {
+  const [layout, setLayout] = useState<Layout>(SERVER_LAYOUT);
+  useEffect(() => {
+    const update = () => setLayout(computeLayout(window.innerWidth, window.innerHeight));
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  }, []);
+  return layout;
 }
 
-/** True on a phone-width window. False on the server and until the first client render. */
+/** True for the compact (phone and upright-tablet) layout. */
 export function useIsPhone(): boolean {
-  const [phone, setPhone] = useState(false);
-  useEffect(() => {
-    const query = window.matchMedia(`(max-width: ${PHONE_MAX_WIDTH}px)`);
-    const update = () => setPhone(query.matches);
-    update();
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, []);
-  return phone;
+  return useLayout().mode === "compact";
 }

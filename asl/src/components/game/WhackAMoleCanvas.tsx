@@ -352,11 +352,11 @@ export function WhackAMoleCanvas({ onStateChange }: WhackAMoleCanvasProps = {}) 
                     <div className="absolute -top-32 -left-32 w-64 h-64 bg-fuchsia-600/20 blur-[100px] rounded-full animate-pulse pointer-events-none" />
                     <div className="absolute -bottom-32 -right-32 w-64 h-64 bg-cyan-600/20 blur-[100px] rounded-full animate-pulse pointer-events-none" style={{ animationDelay: "1s" }} />
 
-                    <h1 className="text-7xl max-sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-fuchsia-500 to-purple-500 mb-4 tracking-tighter pointer-events-none"
+                    <h1 className="text-7xl compact:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-fuchsia-500 to-purple-500 mb-4 tracking-tighter pointer-events-none"
                         style={{ textShadow: "0 0 40px rgba(168, 85, 247, 0.4)" }}>
                         WHACK-A-SIGN
                     </h1>
-                    <p className="text-purple-200/80 font-mono mb-12 max-sm:mb-6 max-w-md text-center text-sm max-sm:text-xs tracking-widest uppercase pointer-events-none">
+                    <p className="text-purple-200/80 font-mono mb-12 compact:mb-6 max-w-md text-center text-sm compact:text-xs tracking-widest uppercase pointer-events-none">
                         Reflex Lab • AI Sign Speed Test
                     </p>
 
@@ -364,10 +364,10 @@ export function WhackAMoleCanvas({ onStateChange }: WhackAMoleCanvasProps = {}) 
                         data-testid="whack-start"
                         onClick={handleStartChallenge}
                         disabled={isCreating || waitingForCamera}
-                        className="relative glass-button px-16 py-6 max-sm:px-8 max-sm:py-5 rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(45,226,230,0.4)] transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-60 disabled:cursor-wait border-2 border-cyan-400/60 group pointer-events-auto"
+                        className="relative glass-button px-16 py-6 compact:px-8 compact:py-5 rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(45,226,230,0.4)] transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-60 disabled:cursor-wait border-2 border-cyan-400/60 group pointer-events-auto"
                     >
                         <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/30 via-fuchsia-500/30 to-purple-500/30 group-hover:opacity-100 opacity-60 transition-opacity pointer-events-none" />
-                        <span className="relative z-10 text-white font-black tracking-[8px] max-sm:tracking-[4px] text-2xl max-sm:text-xl uppercase drop-shadow-[0_0_15px_rgba(255,255,255,0.8)] pointer-events-none">
+                        <span className="relative z-10 text-white font-black tracking-[8px] compact:tracking-[4px] text-2xl compact:text-xl uppercase drop-shadow-[0_0_15px_rgba(255,255,255,0.8)] pointer-events-none">
                             {isCreating ? "STARTING..." : waitingForCamera ? "STARTING CAMERA..." : "START CHALLENGE"}
                         </span>
                     </button>

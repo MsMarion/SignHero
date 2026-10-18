@@ -2,6 +2,8 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+/* The compact (phone / upright tablet) layout; set on the stage by ScaledContainer. */
+@custom-variant compact (&:where([data-layout="compact"], [data-layout="compact"] *));
 
 @font-face {
   font-family: subheading-font;

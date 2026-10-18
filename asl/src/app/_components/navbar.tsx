@@ -101,7 +101,7 @@ const Navbar: React.FC = () => {
       initial={{ y: -50, opacity: 0 }}
       animate={{ y: isHidden ? -250 : 0, opacity: isHidden ? 0 : 1 }}
       transition={{ type: "spring", stiffness: 120, damping: 20 }}
-      className="absolute top-[80px] h-[120px] left-0 right-0 z-40 pointer-events-none flex items-end justify-center max-sm:hidden"
+      className="absolute top-[80px] h-[120px] left-0 right-0 z-40 pointer-events-none flex items-end justify-center compact:hidden"
     >
       {/* 1. Previous Route Side Tab (Z=10) */}
       <div

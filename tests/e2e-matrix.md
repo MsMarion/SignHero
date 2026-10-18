@@ -107,6 +107,12 @@ Legend: **page** = what the player sees; **API** = server behaviour the page dep
 | F-05 | lobby and game | camera refused | the player is told, START is available, the game plays (tapping = practice) |
 | F-06 | whole game | tap the sign | scores, shows "practice", the report says "not on the leaderboard", no leaderboard entry is created |
 | F-07 | sign in, leaderboard | open on a phone | content starts below the compact header and fits the width |
+| F-08 | tablet held upright (820 x 1180) | lobby and game | gets the compact layout: camera and sign in play, no letter grid, no tab arch, START fits |
+| F-09 | tablet on its side (1180 x 820) | lobby and game | keeps the desktop layout: stage fits, grid shown, tab arch shown, stage cannot be scrolled out of place |
+| F-10 | small laptop (1366 x 768) | lobby and game | same as F-09 |
+| F-11 | ultrawide (3440 x 1440) | lobby and game | same as F-09 |
+| F-12 | phone on its side (844 x 390) | any page | "rotate your phone upright" notice; "continue anyway" lets the player through |
+| F-13 | wide, short window (1440 x 480) | lobby | still a desktop: no rotate notice |
 | W-22 | lobby (not on CI) | hand tracking files cannot be loaded | START still opens up and the game can be played |
 
 ## Songs (none exist in production yet)
