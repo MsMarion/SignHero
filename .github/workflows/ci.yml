@@ -1,0 +1,102 @@
+name: CI
+
+# Checks every pull request and every push to main. Runs only on GitHub-hosted runners: this repo is
+# public, so nothing from a pull request may ever run on the self-hosted deploy runner.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    name: web (types and build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: asl
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          package_json_file: asl/package.json # pins pnpm from "packageManager"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: asl/pnpm-lock.yaml
+      - name: Install (also generates the Prisma client)
+        run: pnpm install --frozen-lockfile
+      - name: Type check
+        run: pnpm exec tsc --noEmit
+      - name: Production build
+        env:
+          SKIP_ENV_VALIDATION: "1"
+          DATABASE_URL: mongodb://localhost:27017/ci
+          NEXTAUTH_URL: http://localhost:4000
+          NEXTAUTH_SECRET: ci-build-only
+        run: pnpm build
+
+  account-tests:
+    name: account tests (MongoDB)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: asl
+    env:
+      DATABASE_URL: mongodb://localhost:27017/ci?directConnection=true
+      NEXTAUTH_URL: http://localhost:4000
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          package_json_file: asl/package.json
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: asl/pnpm-lock.yaml
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Start a throwaway MongoDB replica set
+        # Hero-name claims use transactions, which MongoDB only allows on a replica set.
+        run: |
+          docker run -d --name mongo -p 27017:27017 mongo:7 --replSet rs0 --bind_ip_all
+          for i in $(seq 1 30); do docker exec mongo mongosh --quiet --eval 'db.adminCommand("ping")' >/dev/null 2>&1 && break; sleep 2; done
+          docker exec mongo mongosh --quiet --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"localhost:27017"}]})'
+          for i in $(seq 1 30); do docker exec mongo mongosh --quiet --eval 'quit(db.hello().isWritablePrimary ? 0 : 1)' >/dev/null 2>&1 && break; sleep 2; done
+          docker exec mongo mongosh --quiet --eval 'print("primary: " + db.hello().isWritablePrimary)'
+      - name: Create collections and unique indexes
+        run: pnpm exec prisma db push
+      - name: Run the account tests
+        run: pnpm test:account
+
+  backend:
+    name: backend and compose (static checks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.11"
+      - name: Compile the backend sources
+        run: |
+          python -m compileall -q api_server_http.py \
+            "Base test/Sign-Language-Recognition/app" \
+            "Base test/Sign-Language-Recognition/model" \
+            "Base test/Sign-Language-Recognition/utils"
+      - name: Resolve the pinned requirements (no install)
+        run: python -m pip install --dry-run -r backend/requirements.txt
+      - name: Validate the compose files
+        run: |
+          docker compose -f docker-compose.yml config -q
+          docker compose -f backend/docker-compose.yml config -q
