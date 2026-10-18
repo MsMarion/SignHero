@@ -338,7 +338,10 @@ await check('browser game: camera live, frames flow, a dropped connection recove
     // Everything the page loads must come from our own site or backend: no third-party CDN at play time.
     const ours = new Set([new URL(BASE).host, new URL(API).host]);
     const requested = events.filter((e) => e.method === 'Network.requestWillBeSent').map((e) => e.params.request.url);
-    const foreign = [...new Set(requested.filter((u) => /^(https?|wss?):/.test(u) && !ours.has(new URL(u).host)).map((u) => new URL(u).host))];
+    // Cloudflare injects its own analytics beacon (static.cloudflareinsights.com) at the edge on the public site;
+    // that is not our code, so it is not a dependency of the game.
+    const edgeInjected = (host) => /(^|\.)cloudflareinsights\.com$/.test(host);
+    const foreign = [...new Set(requested.filter((u) => /^(https?|wss?):/.test(u)).map((u) => new URL(u).host).filter((h) => !ours.has(h) && !edgeInjected(h)))];
     assert(foreign.length === 0, `the page contacted other hosts: ${foreign.join(', ')}`);
     assert(requested.some((u) => u.includes('/mediapipe/hands/')), 'hand tracking files were not loaded from /mediapipe/hands/');
     assert(consoleErrors.length === 0, `console errors: ${consoleErrors.slice(0, 3).join(' | ')}`);
