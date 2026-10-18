@@ -60,10 +60,17 @@ health_once() {
   curl -fsS -m 8 http://127.0.0.1:4001/concurrency_status 2>/dev/null | grep -q "\"device\":\"$EXPECT_DEVICE\"" || return 1
   # A real round trip through the model: connect, read the ready message, send one frame, expect a letter.
   docker exec -i "$c" python - <<'PY' >/dev/null 2>&1
-import asyncio, json, websockets
+import asyncio, hashlib, hmac, json, os, secrets, time, websockets
+
+# When the container has DETECTION_TOKEN_SECRET the server wants a signed ticket; make one the way the site does.
+url = "ws://127.0.0.1:4001/ws/predict"
+secret = os.environ.get("DETECTION_TOKEN_SECRET", "")
+if secret:
+    payload = f"{int(time.time()) + 60}.{secrets.token_hex(8)}"
+    url += "?token=" + payload + "." + hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
 
 async def main():
-    async with websockets.connect("ws://127.0.0.1:4001/ws/predict") as ws:
+    async with websockets.connect(url) as ws:
         json.loads(await asyncio.wait_for(ws.recv(), 10))
         landmarks = [{"x": 0.5, "y": 0.5, "z": 0.0}] * 21
         await ws.send(json.dumps({"clientTimestamp": 0, "handDetected": True, "landmarks": landmarks}))

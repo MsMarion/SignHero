@@ -8,6 +8,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "~/env";
+import { mediaUrlForKey, resolveMediaUrl } from "~/server/media";
 
 // Initialize S3 client based on STORAGE_MODE
 const isLocal = env.STORAGE_MODE === "local";
@@ -259,9 +260,19 @@ export async function getPresignedDownloadUrl(
  */
 export function getPublicUrl(key: string): string {
     if (isLocal) {
-        return `http://${env.LOCAL_STORAGE_ENDPOINT || "localhost:9000"}/${BUCKET}/${key}`;
+        // MinIO is only reachable from this machine; the site serves objects itself (see app/api/media).
+        return mediaUrlForKey(key);
     }
     return `https://${BUCKET}.${env.DO_SPACES_REGION}.digitaloceanspaces.com/${key}`;
+}
+
+/** What to send a browser for a stored song image/audio value (see server/media.ts). */
+export function songMediaUrl(value: string | null | undefined): string | null {
+    return resolveMediaUrl(value, {
+        bucket: BUCKET,
+        minioPort: (env.LOCAL_STORAGE_ENDPOINT ?? "localhost:4003").split(":")[1],
+        fallback: getPublicUrl,
+    });
 }
 
 /**
@@ -269,7 +280,7 @@ export function getPublicUrl(key: string): string {
  */
 export function getCdnUrl(key: string): string {
     if (isLocal) {
-        return `http://${env.LOCAL_STORAGE_ENDPOINT || "localhost:9000"}/${BUCKET}/${key}`;
+        return mediaUrlForKey(key);
     }
     return `https://${BUCKET}.${env.DO_SPACES_REGION}.cdn.digitaloceanspaces.com/${key}`;
 }

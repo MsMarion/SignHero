@@ -9,7 +9,7 @@ import {
 import { devmodeEnabled } from "~/server/devmode-guard";
 
 import { z } from "zod";
-import { getPublicUrl } from "~/lib/s3";
+import { songMediaUrl } from "~/lib/s3";
 
 const createSongSchema = z.object({
   songName: z.string().min(1, "Song name is required").max(200, "Song name too long"),
@@ -36,8 +36,8 @@ export const songRouter = createTRPCRouter({
       });
       return songs.map(song => ({
         ...song,
-        thumbnailUrl: song.thumbnailUrl ? (song.thumbnailUrl.startsWith("http") || song.thumbnailUrl.startsWith("/") ? song.thumbnailUrl : getPublicUrl(song.thumbnailUrl)) : null,
-        audioUrl: song.audioUrl ? (song.audioUrl.startsWith("http") || song.audioUrl.startsWith("/") ? song.audioUrl : getPublicUrl(song.audioUrl)) : null,
+        thumbnailUrl: songMediaUrl(song.thumbnailUrl),
+        audioUrl: songMediaUrl(song.audioUrl),
       }));
     } catch (error) {
       throw new TRPCError({
@@ -59,8 +59,8 @@ export const songRouter = createTRPCRouter({
       });
       return songs.map(song => ({
         ...song,
-        thumbnailUrl: song.thumbnailUrl ? (song.thumbnailUrl.startsWith("http") || song.thumbnailUrl.startsWith("/") ? song.thumbnailUrl : getPublicUrl(song.thumbnailUrl)) : null,
-        audioUrl: song.audioUrl ? (song.audioUrl.startsWith("http") || song.audioUrl.startsWith("/") ? song.audioUrl : getPublicUrl(song.audioUrl)) : null,
+        thumbnailUrl: songMediaUrl(song.thumbnailUrl),
+        audioUrl: songMediaUrl(song.audioUrl),
       }));
     } catch (error) {
       throw new TRPCError({
@@ -82,8 +82,8 @@ export const songRouter = createTRPCRouter({
       });
       return songs.map(song => ({
         ...song,
-        thumbnailUrl: song.thumbnailUrl ? (song.thumbnailUrl.startsWith("http") || song.thumbnailUrl.startsWith("/") ? song.thumbnailUrl : getPublicUrl(song.thumbnailUrl)) : null,
-        audioUrl: song.audioUrl ? (song.audioUrl.startsWith("http") || song.audioUrl.startsWith("/") ? song.audioUrl : getPublicUrl(song.audioUrl)) : null,
+        thumbnailUrl: songMediaUrl(song.thumbnailUrl),
+        audioUrl: songMediaUrl(song.audioUrl),
       }));
     } catch (error) {
       throw new TRPCError({
@@ -115,8 +115,8 @@ export const songRouter = createTRPCRouter({
 
         return {
           ...song,
-          thumbnailUrl: song.thumbnailUrl ? (song.thumbnailUrl.startsWith("http") || song.thumbnailUrl.startsWith("/") ? song.thumbnailUrl : getPublicUrl(song.thumbnailUrl)) : null,
-          audioUrl: song.audioUrl ? (song.audioUrl.startsWith("http") || song.audioUrl.startsWith("/") ? song.audioUrl : getPublicUrl(song.audioUrl)) : null,
+          thumbnailUrl: songMediaUrl(song.thumbnailUrl),
+          audioUrl: songMediaUrl(song.audioUrl),
         };
       } catch (error) {
         if (error instanceof TRPCError) throw error;

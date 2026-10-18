@@ -90,8 +90,8 @@ export default function DevModePage() {
 
             if (data.success) {
                 // Construct MinIO URL (Standard: http://localhost:4003/signhero/key)
-                const fullAudioUrl = `http://localhost:4003/signhero/${data.audioUrl}`;
-                const fullThumbUrl = `http://localhost:4003/signhero/${data.thumbnailUrl}`;
+                const fullAudioUrl = `/api/media/${data.audioUrl}`;
+                const fullThumbUrl = `/api/media/${data.thumbnailUrl}`;
 
                 setAudioUrl(fullAudioUrl);
                 setUploadedAudioUrl(data.audioUrl);
@@ -292,7 +292,7 @@ export default function DevModePage() {
                                 {(uploadedThumbnailUrl || thumbnailFile) && (
                                     <div className="w-40 h-40 rounded-xl overflow-hidden border-2 border-cyan-400 shadow-[0_0_15px_rgba(45,226,230,0.5)]">
                                         <img 
-                                            src={thumbnailFile ? URL.createObjectURL(thumbnailFile) : `http://localhost:4003/signhero/${uploadedThumbnailUrl}`} 
+                                            src={thumbnailFile ? URL.createObjectURL(thumbnailFile) : `/api/media/${uploadedThumbnailUrl}`} 
                                             alt="Thumbnail Preview" 
                                             className="w-full h-full object-cover"
                                         />

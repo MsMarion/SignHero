@@ -62,7 +62,7 @@ export function useSignDetection(
       console.log(`WebSocket reconnecting in ${delay} ms (attempt ${attempt})`);
       retryTimer = setTimeout(() => {
         retryTimer = null;
-        connect();
+        void connect();
       }, delay);
     };
 
@@ -82,11 +82,27 @@ export function useSignDetection(
       scheduleReconnect();
     };
 
-    const connect = () => {
+    // A short-lived signed ticket from our own server; the detection server refuses sockets without one.
+    // If it cannot be fetched we still try to connect (the server decides whether a ticket is required).
+    const fetchTicket = async (): Promise<string | null> => {
+      try {
+        const res = await fetch("/api/detection-token", { cache: "no-store" });
+        if (!res.ok) return null;
+        const body = (await res.json()) as { token?: unknown };
+        return typeof body.token === "string" ? body.token : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const connect = async () => {
+      if (disposed) return;
+      const ticket = await fetchTicket();
       if (disposed) return;
       console.log(attempt === 0 ? `Connecting WebSocket to: ${wsUrl}` : `Reconnecting WebSocket to: ${wsUrl}`);
 
-      const ws = new WebSocket(wsUrl);
+      const url = ticket ? `${wsUrl}${wsUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(ticket)}` : wsUrl;
+      const ws = new WebSocket(url);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -159,7 +175,7 @@ export function useSignDetection(
       }
     }, 1000);
 
-    connect();
+    void connect();
 
     return () => {
       disposed = true;

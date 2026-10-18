@@ -12,7 +12,7 @@ services:
     command: ["--replSet", "rs0", "--bind_ip_all"]
     restart: unless-stopped
     ports:
-      - "4002:27017"
+      - "127.0.0.1:4002:27017"
     volumes:
       - mongodb_data:/data/db
     environment:
@@ -32,8 +32,8 @@ services:
     container_name: asl-minio
     restart: unless-stopped
     ports:
-      - "4003:9000"   # S3 API
-      - "4004:9001"   # MinIO Web Console
+      - "127.0.0.1:4003:9000"   # S3 API
+      - "127.0.0.1:4004:9001"   # MinIO Web Console
     volumes:
       - minio_data:/data
     environment:

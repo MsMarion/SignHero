@@ -18,6 +18,11 @@ services:
     restart: unless-stopped
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
+      # Detection tickets (see api_server_http.py). Put the values in /opt/signhero-api-prod/.env, never in this file.
+      # DETECTION_TOKEN_REQUIRED=0 accepts sockets without a ticket (rollout); unset, tickets are required once a secret is set.
+      - DETECTION_TOKEN_SECRET=${DETECTION_TOKEN_SECRET:-}
+      - DETECTION_TOKEN_REQUIRED=${DETECTION_TOKEN_REQUIRED:-}
+      - MAX_WS_PER_ADDRESS=${MAX_WS_PER_ADDRESS:-10}
     ports:
       - "4001:4001"
     volumes:
