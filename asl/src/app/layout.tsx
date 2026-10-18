@@ -38,6 +38,8 @@ import { MenuContainerWrapper } from "./_components/MenuContainerWrapper";
 import { ScaledContainer } from "~/components/ScaledContainer";
 import { AuthProvider } from "./_components/auth-provider";
 import { HeroNameGate } from "./_components/HeroNameGate";
+import { ClientErrorReporter } from "./_components/ClientErrorReporter";
+import { DebugPanel } from "./_components/DebugPanel";
 
 export default function RootLayout({
   children,
@@ -49,6 +51,8 @@ export default function RootLayout({
           <UnifiedBackground />
           <AuthProvider>
             <HeroNameGate />
+            <ClientErrorReporter />
+            <DebugPanel />
             <BackgroundMusic />
             <TopHUD />
             <Navbar />

@@ -198,6 +198,17 @@ BATCH_TIMEOUT = 0.01  # 10ms sweep
 MAX_WS_CONNECTIONS = 50  # Hard cap on concurrent WebSocket players
 active_ws_connections = 0
 
+# Counters for /metrics (Prometheus text format). Plain ints/dicts are enough: everything runs on the one asyncio loop.
+STARTED_AT = time.time()
+metrics = {
+    "ws_accepted_total": 0,
+    "frames_total": 0,           # frames received from browsers
+    "frames_throttled_total": 0, # answered from the last reply because they came faster than ~35 per second
+    "frames_no_hand_total": 0,   # no hand / invalid landmarks: answered immediately with "None"
+    "frames_inferred_total": 0,  # went through the batcher and the model
+}
+ws_rejected = {"capacity": 0, "origin_or_ticket": 0, "per_address": 0}
+
 async def batch_processor():
     logger.info("Starting RTX 5090 Dynamic Micro-Batcher Loop")
     global batch_stats
@@ -304,12 +315,50 @@ async def concurrency_status():
         "mode": "dynamic_micro_batching"
     }
 
+@app.get("/healthz")
+async def healthz():
+    """Cheap liveness check for monitors: 200 only once the model is loaded."""
+    from fastapi.responses import JSONResponse
+    ready = resources is not None
+    return JSONResponse(
+        {
+            "status": "ok" if ready else "starting",
+            "device": str(resources.device) if resources else "unknown",
+            "model_in_vram": bool(resources and resources.in_vram),
+            "websockets": active_ws_connections,
+            "uptime_seconds": round(time.time() - STARTED_AT),
+        },
+        status_code=200 if ready else 503,
+    )
+
+@app.get("/metrics")
+async def prometheus_metrics():
+    """Prometheus text format: connections, frames, rejections, queue depth, batch statistics."""
+    from fastapi.responses import PlainTextResponse
+    lines = [
+        "# TYPE signhero_ws_active gauge", f"signhero_ws_active {active_ws_connections}",
+        "# TYPE signhero_ws_capacity gauge", f"signhero_ws_capacity {MAX_WS_CONNECTIONS}",
+        "# TYPE signhero_queue_depth gauge", f"signhero_queue_depth {batch_queue.qsize() if batch_queue else 0}",
+        "# TYPE signhero_model_in_vram gauge", f"signhero_model_in_vram {1 if (resources and resources.in_vram) else 0}",
+        "# TYPE signhero_uptime_seconds gauge", f"signhero_uptime_seconds {round(time.time() - STARTED_AT)}",
+        "# TYPE signhero_batches_total counter", f"signhero_batches_total {batch_stats.get('total_batches', 0)}",
+        "# TYPE signhero_batch_frames_total counter", f"signhero_batch_frames_total {batch_stats.get('total_frames', 0)}",
+        "# TYPE signhero_avg_batch_size gauge", f"signhero_avg_batch_size {batch_stats.get('avg_batch_size', 0)}",
+    ]
+    for name, value in metrics.items():
+        lines += [f"# TYPE signhero_{name} counter", f"signhero_{name} {value}"]
+    lines.append("# TYPE signhero_ws_rejected_total counter")
+    for reason, value in ws_rejected.items():
+        lines.append(f'signhero_ws_rejected_total{{reason="{reason}"}} {value}')
+    return PlainTextResponse("\n".join(lines) + "\n")
+
 @app.websocket("/ws/predict")
 async def websocket_endpoint(websocket: WebSocket):
     global active_ws_connections
     
     # Connection cap enforcement
     if active_ws_connections >= MAX_WS_CONNECTIONS:
+        ws_rejected["capacity"] += 1
         await websocket.close(code=1013, reason="Server at capacity")
         logger.warning(f"Rejected WebSocket connection: {active_ws_connections}/{MAX_WS_CONNECTIONS} slots full")
         return
@@ -320,10 +369,12 @@ async def websocket_endpoint(websocket: WebSocket):
         WS_AUTH, websocket.headers.get("origin"), websocket.query_params.get("token")
     )
     if not allowed:
+        ws_rejected["origin_or_ticket"] += 1
         logger.warning(f"Rejected WebSocket from {address}: {reason}")
         await websocket.close(code=1008)
         return
     if not ws_limiter.acquire(address):
+        ws_rejected["per_address"] += 1
         logger.warning(f"Rejected WebSocket from {address}: too many connections from this address")
         await websocket.close(code=1013)
         return
@@ -334,6 +385,7 @@ async def websocket_endpoint(websocket: WebSocket):
         ws_limiter.release(address)
         raise
     active_ws_connections += 1
+    metrics["ws_accepted_total"] += 1
     logger.info(f"WebSocket connected ({active_ws_connections}/{MAX_WS_CONNECTIONS} active)")
 
     last_frame_time = 0
@@ -348,7 +400,9 @@ async def websocket_endpoint(websocket: WebSocket):
             # time and waits for the reply, so a dropped frame must still get an answer or the
             # client stalls forever; repeat the last prediction instead of staying silent.
             now = time.time()
+            metrics["frames_total"] += 1
             if now - last_frame_time < 0.028: # < 28ms
+                metrics["frames_throttled_total"] += 1
                 reply = dict(last_reply) if last_reply else {"letter": "None", "confidence": 0.0, "handDetected": False}
                 reply["timestamp"] = time.time()
                 reply["clientTimestamp"] = data.get("clientTimestamp", now)
@@ -368,6 +422,7 @@ async def websocket_endpoint(websocket: WebSocket):
             )
             
             if not hand_detected or not valid_landmarks:
+                metrics["frames_no_hand_total"] += 1
                 last_reply = {
                     "letter": "None",
                     "confidence": 0.0,
@@ -388,6 +443,7 @@ async def websocket_endpoint(websocket: WebSocket):
             })
             
             prediction = await future
+            metrics["frames_inferred_total"] += 1
             last_reply = prediction
             await websocket.send_json(prediction)
             

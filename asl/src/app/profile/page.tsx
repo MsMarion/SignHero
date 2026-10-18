@@ -13,6 +13,7 @@ export default function ProfilePage() {
   
   const [geminiApiKey, setGeminiApiKey] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const { data: userData, isLoading } = api.user.getMe.useQuery(undefined, {
     enabled: !!session,
@@ -20,8 +21,13 @@ export default function ProfilePage() {
 
   const updateMutation = api.user.updateProfile.useMutation({
     onSuccess: () => {
+      setSaveError(null);
       setIsSuccess(true);
       setTimeout(() => setIsSuccess(false), 3000);
+    },
+    onError: (error) => {
+      setIsSuccess(false);
+      setSaveError(error.message || "Could not save your profile. Please try again.");
     },
   });
 
@@ -130,6 +136,12 @@ export default function ProfilePage() {
                 )}
               </div>
             </button>
+
+            {saveError && (
+              <p role="alert" data-testid="profile-error" className="text-red-400 font-bold text-xs tracking-widest">
+                {saveError}
+              </p>
+            )}
 
             {isSuccess && (
               <motion.p

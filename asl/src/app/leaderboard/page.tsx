@@ -52,7 +52,7 @@ const LeaderboardPage = () => {
     { id: playerId! },
     { enabled: !!playerId }
   );
-  const { data: leaderboardData } = api.leaderboard.getTop.useQuery({ limit: 10 });
+  const { data: leaderboardData, isError: leaderboardFailed, refetch: refetchLeaderboard } = api.leaderboard.getTop.useQuery({ limit: 10 });
 
   const stars = useMemo(() => {
     return [...Array(100)].map((_, i) => ({
@@ -275,7 +275,14 @@ const LeaderboardPage = () => {
                             </div>
                           ))
                         ) : (
+                          leaderboardFailed ? (
+                          <div data-testid="leaderboard-error" className="text-center text-red-300/80 font-mono py-8">
+                            COULD NOT LOAD SCORES{' '}
+                            <button onClick={() => void refetchLeaderboard()} className="underline cursor-pointer">RETRY</button>
+                          </div>
+                        ) : (
                           <div className="text-center text-fuchsia-300/50 font-mono py-8">{leaderboardData === undefined ? 'LOADING...' : 'NO SCORES YET'}</div>
+                        )
                         )}
                       </div>
 

@@ -32,7 +32,7 @@ export default function Home() {
           Master American Sign Language through interactive rhythm games
         </p>
 
-        <Link href="/songselection" passHref>
+        <Link href="/whack" passHref>
           <button
             onMouseEnter={() => {
               setIsHovering(true);

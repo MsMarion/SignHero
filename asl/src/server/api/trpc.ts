@@ -13,6 +13,7 @@ import { ZodError } from "zod";
 import { db } from "~/server/db";
 import { getServerAuthSession } from "~/server/auth";
 import { createRateLimiter, getClientKey } from "~/server/rate-limit";
+import { log } from "~/server/log";
 
 /**
  * 1. CONTEXT
@@ -95,8 +96,10 @@ const timingMiddleware = t.middleware(async ({ next, path }) => {
 
   const result = await next();
 
-  const end = Date.now();
-  console.log(`[TRPC] ${path} took ${end - start}ms to execute`);
+  const ms = Date.now() - start;
+  // Every call is a debug line (LOG_LEVEL=debug); anything slow is always worth a warning.
+  if (ms > 1500) log.warn("slow trpc call", { path, ms });
+  else log.debug("trpc call", { path, ms });
 
   return result;
 });

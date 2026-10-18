@@ -127,30 +127,6 @@ export function TopHUD() {
           </div>
         </div>
 
-        {/* Bottom Row: Frosted Level & Stats HUD (Underneath User Auth Card) */}
-        {pathname !== "/" && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex items-center gap-5 px-6 py-2 backdrop-blur-xl bg-black/40 border border-white/10 rounded-2xl shadow-[0_8px_32px_0_rgba(146,0,255,0.25)] border-r border-fuchsia-500/40"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-7 h-7 rounded-full bg-gradient-to-r from-purple-500 to-fuchsia-500 flex items-center justify-center text-xs font-bold text-white shadow-[0_0_15px_rgba(217,70,239,0.5)]">
-                42
-              </div>
-              <span className="font-bold text-xs tracking-wider text-fuchsia-200 uppercase font-[subheading-font]">
-                MASTER
-              </span>
-            </div>
-
-            <div className="w-px h-5 bg-white/10" />
-
-            <div className="flex items-center gap-2 font-mono text-cyan-300 font-bold text-xs shadow-sm">
-              <Sparkles size={14} className="text-cyan-400 animate-pulse" />
-              <span>14,250 XP</span>
-            </div>
-          </motion.div>
-        )}
       </div>
     </motion.header>
   );
