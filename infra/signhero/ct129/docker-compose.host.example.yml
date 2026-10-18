@@ -1,0 +1,31 @@
+# Host-specific compose for CT129 (GTX 1070, unprivileged LXC with the NVIDIA runtime and no-cgroups).
+# Install as /opt/signhero-api-prod/docker-compose.yml. It is not used by CI or developers; the
+# repository's backend/docker-compose.yml is the generic one.
+#
+# The image holds only the heavy dependencies (torch, mediapipe). The backend CODE is mounted read-only
+# from the git clone in /opt/signhero-repo, so a normal release is "git fast-forward + recreate the
+# container" (see ct129/signhero-deploy): no image build, no disk use. An image is built only when
+# backend/Dockerfile or backend/requirements.txt change. The image tag comes from IMAGE_TAG; unset, it is "prod".
+services:
+  signhero-api:
+    build:
+      context: /opt/signhero-repo
+      dockerfile: backend/Dockerfile
+      args:
+        TORCH_INDEX: https://download.pytorch.org/whl/cu126
+    image: signhero-api:${IMAGE_TAG:-prod}
+    runtime: nvidia
+    restart: unless-stopped
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    ports:
+      - "4001:4001"
+    volumes:
+      - type: bind
+        source: /opt/signhero-repo/api_server_http.py
+        target: /app/api_server_http.py
+        read_only: true
+      - type: bind
+        source: /opt/signhero-repo/Base test/Sign-Language-Recognition
+        target: /app/Base test/Sign-Language-Recognition
+        read_only: true

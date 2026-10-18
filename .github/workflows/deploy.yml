@@ -1,0 +1,77 @@
+name: Deploy to production
+
+# On every push to main (and on demand): the self-hosted runner asks the two hosts to release this
+# commit, a GitHub-hosted runner then smoke-tests the public site, and if that test fails both hosts
+# are rolled back. The self-hosted runner never checks out the repository: all logic lives in
+# /usr/local/bin/signhero-deploy on each host (root-owned), reached through a restricted SSH key that
+# can only run status, backup, rollback and "deploy <sha>". The hosts fetch origin/main themselves and
+# refuse any sha that is not on it.
+#
+# main is protected (pull request and passing CI required), so only reviewed, tested code gets here.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: deploy (backend, then frontend)
+    runs-on: [self-hosted, signhero-deploy]
+    timeout-minutes: 45
+    steps:
+      - name: Deploy the GPU backend (CT129)
+        run: ssh signhero-ct129 "deploy ${{ github.sha }}"
+
+      - name: Deploy the frontend (CT119)
+        run: ssh signhero-ct119 "deploy ${{ github.sha }}"
+
+      - name: Show the resulting status
+        if: always()
+        run: |
+          ssh signhero-ct129 status || true
+          ssh signhero-ct119 status || true
+
+  smoke:
+    name: smoke test (production)
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - name: Whack-A-Sign end to end against the public site
+        env:
+          SMOKE_BASE_URL: https://asl.dawnbalaschak.com
+          SMOKE_API_URL: https://aslapi.dawnbalaschak.com
+          SMOKE_BROWSER: "1"
+          CHROME_PATH: /usr/bin/google-chrome
+        run: node tests/smoke/whack-smoke.mjs
+
+  rollback:
+    name: rollback (only if the smoke test failed)
+    needs: [deploy, smoke]
+    if: ${{ always() && needs.deploy.result == 'success' && needs.smoke.result == 'failure' }}
+    runs-on: [self-hosted, signhero-deploy]
+    timeout-minutes: 20
+    steps:
+      - name: Roll back the frontend (CT119)
+        run: ssh signhero-ct119 rollback
+
+      - name: Roll back the GPU backend (CT129)
+        run: ssh signhero-ct129 rollback
+
+      - name: Report
+        run: |
+          echo "The smoke test failed after deploying ${{ github.sha }}. Both hosts were rolled back to the previous release." >&2
+          exit 1

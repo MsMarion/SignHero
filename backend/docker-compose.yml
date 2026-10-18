@@ -9,7 +9,9 @@ services:
       dockerfile: backend/Dockerfile
       args:
         TORCH_INDEX: ${TORCH_INDEX:-https://download.pytorch.org/whl/cu126}
-    image: signhero-api:local
+    # The image tag is a variable so the deploy can keep the previous release next to the new one
+    # (rollback is starting the old tag again). Unset, it is "local".
+    image: signhero-api:${IMAGE_TAG:-local}
     restart: unless-stopped
     ports:
       - "4001:4001"
